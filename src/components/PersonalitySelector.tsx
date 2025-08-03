@@ -32,7 +32,7 @@ export const PersonalitySelector = ({
   const personalities: PersonalityOption[] = [
     {
       id: 'calm',
-      name: 'Calm Teacher',
+      name: 'Winie',
       description: 'Patient and encouraging, explains things step by step',
       icon: <Brain className="h-5 w-5" />,
       color: 'text-ai-calm',
@@ -40,24 +40,24 @@ export const PersonalitySelector = ({
     },
     {
       id: 'angry',
-      name: 'Strict Teacher',
-      description: 'Direct and demanding, pushes you to excellence',
+      name: 'Machinegun',
+      description: 'Fast-paced and intense, rapid-fire teaching style',
       icon: <Zap className="h-5 w-5" />,
       color: 'text-ai-angry',
       bgColor: 'bg-ai-angry/20'
     },
     {
       id: 'cool',
-      name: 'Cool Teacher',
-      description: 'Fun and modern, makes learning enjoyable',
+      name: 'Blabla Teacher',
+      description: 'Non-stopping talkative teacher, loves to explain everything',
       icon: <Glasses className="h-5 w-5" />,
       color: 'text-ai-cool',
       bgColor: 'bg-ai-cool/20'
     },
     {
       id: 'lazy',
-      name: 'Laid-back Teacher',
-      description: 'Relaxed and casual, takes things easy',
+      name: 'Sad Fish',
+      description: 'Melancholic and thoughtful, teaches with quiet wisdom',
       icon: <Coffee className="h-5 w-5" />,
       color: 'text-ai-lazy',
       bgColor: 'bg-ai-lazy/20'
