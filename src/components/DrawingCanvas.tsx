@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from "react";
-import { Canvas as FabricCanvas, Line } from "fabric";
-import { Pencil, Eraser, Square, Circle, Type, RotateCcw, Download } from "lucide-react";
+import { Canvas as FabricCanvas } from "fabric";
+import { Pencil, Square, RotateCcw, Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
 import { Card } from "@/components/ui/card";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { toast } from "sonner";
 
 interface DrawingCanvasProps {
@@ -21,27 +22,10 @@ export const DrawingCanvas = ({ className }: DrawingCanvasProps) => {
     if (!canvasRef.current) return;
 
     const canvas = new FabricCanvas(canvasRef.current, {
-      width: 800,
-      height: 500,
-      backgroundColor: "hsl(var(--canvas-bg))",
+      width: 3000,
+      height: 2000,
+      backgroundColor: "#ffffff",
     });
-
-    // Add notebook lines background
-    const drawNotebookLines = () => {
-      const lineHeight = 25;
-      const canvasHeight = canvas.height || 500;
-      
-      for (let i = lineHeight; i < canvasHeight; i += lineHeight) {
-        const line = new Line([0, i, canvas.width || 800, i], {
-          stroke: "hsl(var(--notebook-lines))",
-          strokeWidth: 1,
-          selectable: false,
-          evented: false,
-          opacity: 0.3,
-        });
-        canvas.add(line);
-      }
-    };
 
     // Initialize drawing brush safely
     if (canvas.freeDrawingBrush) {
@@ -50,7 +34,6 @@ export const DrawingCanvas = ({ className }: DrawingCanvasProps) => {
     }
     canvas.isDrawingMode = activeTool === "draw";
 
-    drawNotebookLines();
     setFabricCanvas(canvas);
     toast("Drawing canvas ready! Start creating!");
 
@@ -73,16 +56,8 @@ export const DrawingCanvas = ({ className }: DrawingCanvasProps) => {
   const handleClearCanvas = () => {
     if (!fabricCanvas) return;
     
-    // Keep only the background lines
-    const objects = fabricCanvas.getObjects();
-    const linesToKeep = objects.filter(obj => 
-      obj.type === 'line' && !obj.selectable
-    );
-    
     fabricCanvas.clear();
-    fabricCanvas.backgroundColor = "hsl(var(--canvas-bg))";
-    
-    linesToKeep.forEach(line => fabricCanvas.add(line));
+    fabricCanvas.backgroundColor = "#ffffff";
     fabricCanvas.renderAll();
     toast("Canvas cleared!");
   };
@@ -179,9 +154,9 @@ export const DrawingCanvas = ({ className }: DrawingCanvasProps) => {
         ))}
       </div>
 
-      <div className="border-2 border-canvas-border rounded-lg overflow-hidden shadow-card">
-        <canvas ref={canvasRef} className="block" />
-      </div>
+      <ScrollArea className="h-[calc(100vh-300px)] w-full border-2 border-canvas-border rounded-lg shadow-card">
+        <canvas ref={canvasRef} className="block bg-white" />
+      </ScrollArea>
     </Card>
   );
 };
