@@ -26,7 +26,7 @@ const Index = () => {
                 <BookOpen className="h-6 w-6 text-primary" />
               </div>
               <div>
-                <h1 className="text-xl font-bold text-foreground">Digital Notebook</h1>
+                <h1 className="text-xl font-bold text-foreground">SenpAI</h1>
                 <p className="text-sm text-muted-foreground">AI-powered learning companion</p>
               </div>
             </div>
