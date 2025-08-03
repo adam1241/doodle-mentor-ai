@@ -1,73 +1,103 @@
-# Welcome to your Lovable project
+# Doodle Mentor AI
 
-## Project info
+An AI-powered digital notebook and learning companion designed to help students solve problems through interactive drawing and personalized tutoring.
 
-**URL**: https://lovable.dev/projects/6bfd66ad-3d49-4817-b009-404dc8b11024
+## What is Doodle Mentor AI?
 
-## How can I edit this code?
+Doodle Mentor AI is an educational web application that combines the power of digital drawing with AI tutoring to create an engaging learning experience. Students can upload exercise images, draw solutions on an infinite canvas, and receive step-by-step guidance from an AI tutor with different personality modes.
 
-There are several ways of editing your application.
+## Key Features
 
-**Use Lovable**
+### 🎨 **Digital Drawing Canvas**
+- Infinite canvas with grid pattern for organized note-taking
+- Multiple drawing tools (pencil, shapes, erasers)
+- Customizable brush sizes and colors
+- Export capabilities for saving work
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/6bfd66ad-3d49-4817-b009-404dc8b11024) and start prompting.
+### 🤖 **AI Chat Tutor**
+- Interactive AI assistant that helps solve problems step-by-step
+- Multiple personality modes: Calm, Angry, Cool, and Lazy
+- Contextual feedback and learning guidance
+- Problem analysis and solution suggestions
 
-Changes made via Lovable will be committed automatically to this repo.
+### 📸 **Image Upload & Analysis**
+- Upload exercise images or problem statements
+- AI can analyze uploaded content
+- Integration between uploaded materials and drawing canvas
 
-**Use your preferred IDE**
+### 🎯 **Learning-Focused Design**
+- Clean, distraction-free interface
+- Responsive design for various devices
+- Modern UI components for intuitive interaction
 
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
+## Technology Stack
 
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
+- **Frontend**: React 18 with TypeScript
+- **UI Framework**: Tailwind CSS + shadcn/ui components
+- **Drawing Engine**: Fabric.js for canvas functionality
+- **Build Tool**: Vite
+- **State Management**: React Query for server state
+- **Routing**: React Router
 
-Follow these steps:
+## Getting Started
 
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
+### Prerequisites
+- Node.js (recommended: use nvm)
+- npm or yarn
 
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
+### Installation
 
-# Step 3: Install the necessary dependencies.
-npm i
+```bash
+# Clone the repository
+git clone <repository-url>
+cd doodle-mentor-ai
 
-# Step 4: Start the development server with auto-reloading and an instant preview.
+# Install dependencies
+npm install
+
+# Start development server
 npm run dev
 ```
 
-**Edit a file directly in GitHub**
+### Available Scripts
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+- `npm run dev` - Start development server
+- `npm run build` - Build for production
+- `npm run preview` - Preview production build
+- `npm run lint` - Run ESLint
 
-**Use GitHub Codespaces**
+## How It Works
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+1. **Upload**: Students upload an exercise image or problem statement
+2. **Draw**: Use the digital canvas to work through the problem, make diagrams, or take notes
+3. **Chat**: Interact with the AI tutor for guidance, explanations, and feedback
+4. **Learn**: Receive personalized assistance based on the selected AI personality mode
 
-## What technologies are used for this project?
+## AI Personality Modes
 
-This project is built with:
+- **Calm**: Patient and encouraging, perfect for building confidence
+- **Angry**: Direct and challenging, pushes students to think harder
+- **Cool**: Laid-back and casual, makes learning feel effortless
+- **Lazy**: Minimal effort approach, focuses on shortcuts and efficiency
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+## Project Structure
 
-## How can I deploy this project?
+```
+src/
+├── components/          # Reusable UI components
+│   ├── AIChat.tsx      # AI chat interface
+│   ├── DrawingCanvas.tsx # Digital drawing canvas
+│   ├── ImageUpload.tsx # Image upload functionality
+│   └── PersonalitySelector.tsx # AI personality selection
+├── pages/              # Application pages
+├── hooks/              # Custom React hooks
+└── lib/                # Utility functions
+```
 
-Simply open [Lovable](https://lovable.dev/projects/6bfd66ad-3d49-4817-b009-404dc8b11024) and click on Share -> Publish.
+## Contributing
 
-## Can I connect a custom domain to my Lovable project?
+This project is built with modern web technologies and follows React best practices. Contributions are welcome!
 
-Yes, you can!
+## License
 
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
-
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/tips-tricks/custom-domain#step-by-step-guide)
+This project was generated using Lovable and is intended for educational purposes.
