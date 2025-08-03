@@ -43,9 +43,11 @@ export const DrawingCanvas = ({ className }: DrawingCanvasProps) => {
       }
     };
 
-    // Initialize drawing brush
-    canvas.freeDrawingBrush.color = brushColor;
-    canvas.freeDrawingBrush.width = brushSize;
+    // Initialize drawing brush safely
+    if (canvas.freeDrawingBrush) {
+      canvas.freeDrawingBrush.color = brushColor;
+      canvas.freeDrawingBrush.width = brushSize;
+    }
     canvas.isDrawingMode = activeTool === "draw";
 
     drawNotebookLines();
