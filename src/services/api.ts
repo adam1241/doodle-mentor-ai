@@ -20,6 +20,12 @@ export interface AnalysisResponse {
   timestamp: string;
 }
 
+export interface OCRResponse {
+  extractedText: string;
+  confidence: number;
+  timestamp: string;
+}
+
 export class ApiService {
   static async sendChatMessage(
     messages: ChatMessage[], 
@@ -45,8 +51,9 @@ export class ApiService {
 
       return await response.json();
     } catch (error) {
-      console.error('API Error:', error);
-      throw new Error('Failed to send chat message');
+      console.error('Chat API Error:', error);
+      console.error('Chat API Error details:', error.message);
+      throw new Error('Failed to send chat message: ' + error.message);
     }
   }
 
@@ -105,6 +112,33 @@ export class ApiService {
     } catch (error) {
       console.error('Canvas Analysis API Error:', error);
       throw new Error('Failed to analyze canvas');
+    }
+  }
+
+  static async performOCR(imageData: Blob): Promise<OCRResponse> {
+    try {
+      console.log('OCR API - Sending image of size:', imageData.size, 'bytes');
+      
+      const formData = new FormData();
+      formData.append('image', imageData, 'image.png');
+
+      const response = await fetch(`${API_BASE_URL}/ocr`, {
+        method: 'POST',
+        body: formData
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('OCR API Error Response:', errorText);
+        throw new Error(`HTTP error! status: ${response.status} - ${errorText}`);
+      }
+
+      const result = await response.json();
+      console.log('OCR API Response:', result);
+      return result;
+    } catch (error) {
+      console.error('OCR API Error:', error);
+      throw new Error('Failed to perform OCR: ' + error.message);
     }
   }
 

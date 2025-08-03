@@ -7,13 +7,16 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { ApiService, ChatMessage } from "@/services/api";
+import { canvasAnalysisService, LiveCommentary } from "@/services/canvasAnalysis";
 
 interface Message {
   id: string;
   content: string;
   isUser: boolean;
   timestamp: Date;
-  type?: 'analysis' | 'help' | 'feedback';
+  type?: 'analysis' | 'help' | 'feedback' | 'live-commentary';
+  isLiveCommentary?: boolean;
+  triggerReason?: string;
 }
 
 interface AIChatProps {
@@ -124,13 +127,38 @@ export const AIChat = ({ className, selectedPersonality, onAnalyzeCanvas }: AICh
   };
 
   useEffect(() => {
-    scrollRef.current?.scrollIntoView({ behavior: 'smooth' });
+    if (scrollRef.current) {
+      scrollRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
   }, [messages]);
 
-  // Check backend connection on component mount
+  // Check backend connection on component mount and set up live commentary
   useEffect(() => {
     checkBackendConnection();
-  }, [checkBackendConnection]);
+    
+    // Set up live commentary integration
+    canvasAnalysisService.setPersonality(selectedPersonality);
+    canvasAnalysisService.setCommentaryCallback(async (commentary: LiveCommentary) => {
+      // Add live commentary as a message in the chat
+      const liveMessage: Message = {
+        id: Date.now().toString(),
+        content: commentary.message,
+        isUser: false,
+        timestamp: commentary.timestamp,
+        type: 'live-commentary',
+        isLiveCommentary: true,
+        triggerReason: commentary.triggerReason
+      };
+      
+      setMessages(prev => [...prev, liveMessage]);
+      
+      // Play voice for live commentary - ALWAYS enabled for live feedback
+      if (commentary.message) {
+        // Use fallback TTS immediately for speed in competition
+        fallbackTextToSpeech(commentary.message);
+      }
+    });
+  }, [checkBackendConnection, selectedPersonality]);
 
   // Update greeting message when personality changes
   useEffect(() => {
@@ -294,6 +322,7 @@ export const AIChat = ({ className, selectedPersonality, onAnalyzeCanvas }: AICh
     switch (type) {
       case 'analysis': return <Brain className="h-4 w-4" />;
       case 'help': return <Lightbulb className="h-4 w-4" />;
+      case 'live-commentary': return <AlertCircle className="h-4 w-4" />;
       default: return <Bot className="h-4 w-4" />;
     }
   };
@@ -363,7 +392,7 @@ export const AIChat = ({ className, selectedPersonality, onAnalyzeCanvas }: AICh
         </div>
       </div>
 
-      <ScrollArea className="flex-1 p-4">
+      <ScrollArea className="flex-1 p-4 max-h-[400px] overflow-y-auto">
         <div className="space-y-4">
           {messages.map((message) => (
             <div
@@ -380,16 +409,25 @@ export const AIChat = ({ className, selectedPersonality, onAnalyzeCanvas }: AICh
                 className={`max-w-[80%] p-3 rounded-lg ${
                   message.isUser
                     ? 'bg-primary text-primary-foreground'
+                    : message.isLiveCommentary
+                    ? 'bg-orange-50 text-orange-900 border border-orange-200'
                     : 'bg-muted text-muted-foreground'
                 }`}
               >
                 <p className="text-sm">{message.content}</p>
-                <span className="text-xs opacity-70 mt-1 block">
-                  {message.timestamp.toLocaleTimeString([], { 
-                    hour: '2-digit', 
-                    minute: '2-digit' 
-                  })}
-                </span>
+                <div className="flex items-center justify-between mt-1">
+                  <span className="text-xs opacity-70">
+                    {message.timestamp.toLocaleTimeString([], { 
+                      hour: '2-digit', 
+                      minute: '2-digit' 
+                    })}
+                  </span>
+                  {message.isLiveCommentary && (
+                    <span className="text-xs bg-orange-200 text-orange-800 px-2 py-1 rounded-full">
+                      Live AI
+                    </span>
+                  )}
+                </div>
               </div>
 
               {message.isUser && (

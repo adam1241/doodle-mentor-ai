@@ -1,4 +1,3 @@
-import Tesseract from 'tesseract.js';
 import { ApiService } from './api';
 
 export interface CanvasAnalysisResult {
@@ -14,6 +13,7 @@ export interface LiveCommentary {
   type: 'encouragement' | 'suggestion' | 'correction' | 'observation';
   timestamp: Date;
   triggerReason: string;
+  isLiveCommentary: boolean;
 }
 
 export class CanvasAnalysisService {
@@ -24,28 +24,8 @@ export class CanvasAnalysisService {
   private commentaryCallback: ((commentary: LiveCommentary) => void) | null = null;
   private personality: string = 'calm';
 
-  // OCR Worker for better performance
-  private ocrWorker: Tesseract.Worker | null = null;
-
   constructor() {
-    this.initializeOCR();
-  }
-
-  private async initializeOCR() {
-    try {
-      this.ocrWorker = await Tesseract.createWorker('eng', 1, {
-        logger: () => {}, // Disable logging for cleaner console
-      });
-      
-      await this.ocrWorker.setParameters({
-        tessedit_page_seg_mode: Tesseract.PSM.AUTO,
-        tessedit_char_whitelist: '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz+-=*/()[]{}.,!?:; ',
-      });
-      
-      console.log('OCR worker initialized successfully');
-    } catch (error) {
-      console.error('Failed to initialize OCR worker:', error);
-    }
+    // No initialization needed for Mistral OCR
   }
 
   setPersonality(personality: string) {
@@ -114,18 +94,20 @@ export class CanvasAnalysisService {
   }
 
   private async performOCR(imageData: string): Promise<{ text: string; confidence: number }> {
-    if (!this.ocrWorker) {
-      throw new Error('OCR worker not initialized');
-    }
-
     try {
-      const result = await this.ocrWorker.recognize(imageData);
+      // Convert data URL to blob
+      const response = await fetch(imageData);
+      const blob = await response.blob();
+      
+      // Use Mistral OCR via API
+      const ocrResult = await ApiService.performOCR(blob);
+      
       return {
-        text: result.data.text.trim(),
-        confidence: result.data.confidence
+        text: ocrResult.extractedText,
+        confidence: ocrResult.confidence
       };
     } catch (error) {
-      console.error('OCR processing failed:', error);
+      console.error('Mistral OCR processing failed:', error);
       return { text: '', confidence: 0 };
     }
   }
@@ -146,8 +128,13 @@ export class CanvasAnalysisService {
   }
 
   private async generateLiveCommentary(analysis: CanvasAnalysisResult): Promise<void> {
-    if (!this.commentaryCallback) return;
+    if (!this.commentaryCallback) {
+      console.log('No commentary callback set');
+      return;
+    }
 
+    console.log('Generating live commentary for:', analysis.extractedText);
+    
     try {
       let triggerReason = '';
       let commentType: LiveCommentary['type'] = 'correction';
@@ -189,41 +176,31 @@ export class CanvasAnalysisService {
         message: response.message,
         type: commentType,
         timestamp: new Date(),
-        triggerReason
+        triggerReason,
+        isLiveCommentary: true
       };
 
+      console.log('Generated commentary:', commentary);
       this.commentaryCallback(commentary);
     } catch (error) {
       console.error('Failed to generate live commentary:', error);
+      console.error('Error details:', error.message);
     }
   }
 
   private buildContextualPrompt(analysis: CanvasAnalysisResult, triggerReason: string): string {
-    let prompt = `You are a teacher standing next to a student. `;
+    const text = analysis.extractedText;
     
     switch (triggerReason) {
       case 'math_content_detected':
-        prompt += `The student wrote: "${analysis.extractedText}". Act like a real math teacher: Check if this is correct, point out any errors you see, ask what their next step should be, or guide them to think deeper about the problem. If it's wrong, tell them specifically what's wrong and ask a question to help them figure out the right approach.`;
-        break;
+        return `Check: "${text}". Is this right? If wrong, say what's wrong. If right, what's next?`;
       case 'question_detected':
-        prompt += `The student wrote a question: "${analysis.extractedText}". Don't answer directly. Instead, ask them what they think, what they've tried so far, or guide them to break down the question into smaller parts they can solve.`;
-        break;
-      case 'learning_content_detected':
-        prompt += `Student wrote learning content: "${analysis.extractedText}". Act like a teacher checking understanding: Ask them to explain what this means in their own words, give an example, or connect it to something they already know. If it's incomplete or unclear, guide them to think deeper.`;
-        break;
-      case 'text_written':
-        prompt += `Student wrote: "${analysis.extractedText}". Check for understanding by asking what they mean, if they can explain it back, or what the next logical step would be. Point out if anything seems unclear or incorrect.`;
-        break;
+        return `You asked: "${text}". What do you think? Break it down step by step.`;
       case 'drawing_activity':
-        prompt += `The student is drawing/sketching. If it looks like a diagram, graph, or visual problem-solving, ask them to explain what they're showing, check if it's accurate, or guide them to add missing elements. Don't just praise - teach!`;
-        break;
+        return `Nice drawing! What does this show? Is it accurate?`;
       default:
-        prompt += `The student is working. Ask them what they're thinking about, what they're trying to solve, or guide them to the next step in their learning process.`;
+        return `I see: "${text}". What's your next step?`;
     }
-    
-    prompt += ` Be direct, specific, and pedagogical like a real teacher. Keep it short (1-2 sentences) and always end with a teaching question that makes them think deeper.`;
-    
-    return prompt;
   }
 
   private detectMathContent(text: string): boolean {
@@ -288,8 +265,11 @@ export class CanvasAnalysisService {
   async analyzeCanvas(canvasElement: HTMLCanvasElement): Promise<CanvasAnalysisResult | null> {
     if (!canvasElement) return null;
 
-    // Convert canvas to data URL
-    const imageData = canvasElement.toDataURL('image/png');
+    // Convert canvas to data URL with high quality
+    const imageData = canvasElement.toDataURL('image/png', 1.0);
+    
+    console.log('Canvas analysis - Canvas size:', canvasElement.width, 'x', canvasElement.height);
+    console.log('Canvas analysis - Image data length:', imageData.length);
     
     // Check if there's a significant change
     if (!this.hasSignificantImageChange(imageData)) {
@@ -315,8 +295,11 @@ export class CanvasAnalysisService {
         this.lastAnalysis = analysis;
         this.lastImageData = imageData;
 
-        // Generate live commentary if there's any meaningful content
-        if (analysis.extractedText.length > 1 || analysis.analysisType === 'drawing') {
+        console.log('Canvas analysis - Extracted text:', analysis.extractedText);
+        console.log('Canvas analysis - Confidence:', analysis.confidence);
+        
+        // Generate live commentary for ANY content - even single characters for competition
+        if (analysis.extractedText.length > 0 || analysis.analysisType === 'drawing') {
           await this.generateLiveCommentary(analysis);
         }
       } catch (error) {
@@ -330,18 +313,19 @@ export class CanvasAnalysisService {
   // Method to analyze uploaded images
   async analyzeUploadedImage(imageFile: File): Promise<CanvasAnalysisResult> {
     try {
-      const ocrResult = await this.performOCR(imageFile);
+      // Use Mistral OCR directly for uploaded files
+      const ocrResult = await ApiService.performOCR(imageFile);
       
       const analysis: CanvasAnalysisResult = {
-        extractedText: ocrResult.text,
+        extractedText: ocrResult.extractedText,
         confidence: ocrResult.confidence,
         timestamp: new Date(),
         hasSignificantChange: true,
-        analysisType: this.determineAnalysisType(ocrResult.text, '')
+        analysisType: this.determineAnalysisType(ocrResult.extractedText, '')
       };
 
       // Generate commentary for uploaded content
-      if (analysis.extractedText.length > 5) {
+      if (analysis.extractedText.length > 1) {
         await this.generateLiveCommentary(analysis);
       }
 
@@ -354,10 +338,7 @@ export class CanvasAnalysisService {
 
   // Clean up resources
   async dispose() {
-    if (this.ocrWorker) {
-      await this.ocrWorker.terminate();
-      this.ocrWorker = null;
-    }
+    // No cleanup needed for Mistral OCR
   }
 }
 

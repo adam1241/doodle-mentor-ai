@@ -6,8 +6,7 @@ import { Slider } from "@/components/ui/slider";
 import { Card } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { toast } from "sonner";
-import { canvasAnalysisService, LiveCommentary } from "@/services/canvasAnalysis";
-import { LiveCommentaryComponent } from "./LiveCommentary";
+import { canvasAnalysisService } from "@/services/canvasAnalysis";
 
 interface DrawingCanvasProps {
   className?: string;
@@ -29,9 +28,7 @@ export const DrawingCanvas = ({ className, selectedPersonality = 'calm' }: Drawi
   const renderTimeoutRef = useRef<number | null>(null);
   
   // Live analysis state
-  const [liveCommentary, setLiveCommentary] = useState<LiveCommentary[]>([]);
   const [isLiveAnalysisEnabled, setIsLiveAnalysisEnabled] = useState(true);
-  const [isVoiceEnabled, setIsVoiceEnabled] = useState(false);
   const analysisTimeoutRef = useRef<number | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -97,11 +94,6 @@ export const DrawingCanvas = ({ className, selectedPersonality = 'calm' }: Drawi
     // Set personality for analysis service
     canvasAnalysisService.setPersonality(selectedPersonality);
     
-    // Set up commentary callback
-    canvasAnalysisService.setCommentaryCallback((commentary: LiveCommentary) => {
-      setLiveCommentary(prev => [...prev, commentary]);
-    });
-
     return () => {
       // Clean up analysis service on unmount
       canvasAnalysisService.dispose();
@@ -110,16 +102,22 @@ export const DrawingCanvas = ({ className, selectedPersonality = 'calm' }: Drawi
 
   // Trigger analysis when canvas changes
   const triggerCanvasAnalysis = useCallback(() => {
-    if (!fabricCanvas || !canvasRef.current || !isLiveAnalysisEnabled) return;
+    if (!fabricCanvas || !canvasRef.current || !isLiveAnalysisEnabled) {
+      console.log('Canvas analysis skipped:', { fabricCanvas: !!fabricCanvas, canvasRef: !!canvasRef.current, isLiveAnalysisEnabled });
+      return;
+    }
 
+    console.log('Triggering canvas analysis...');
+    
     // Debounce analysis calls
     if (analysisTimeoutRef.current) {
       clearTimeout(analysisTimeoutRef.current);
     }
 
     analysisTimeoutRef.current = setTimeout(() => {
+      console.log('Starting canvas analysis after debounce');
       canvasAnalysisService.analyzeCanvas(canvasRef.current!);
-    }, 2000); // Wait 2 seconds after last change
+    }, 1000); // Wait 1 second after last change - faster for competition
   }, [fabricCanvas, isLiveAnalysisEnabled]);
 
   // Handle keyboard events for delete functionality
@@ -616,12 +614,7 @@ export const DrawingCanvas = ({ className, selectedPersonality = 'calm' }: Drawi
 
   const toggleLiveAnalysis = () => {
     setIsLiveAnalysisEnabled(!isLiveAnalysisEnabled);
-    toast(isLiveAnalysisEnabled ? "Live analysis disabled" : "Live analysis enabled");
-  };
-
-  const clearCommentary = () => {
-    setLiveCommentary([]);
-    toast("Commentary cleared");
+    toast(isLiveAnalysisEnabled ? "Live AI teacher disabled" : "Live AI teacher enabled");
   };
 
   const colors = [
@@ -808,16 +801,6 @@ export const DrawingCanvas = ({ className, selectedPersonality = 'calm' }: Drawi
         />
       </div>
     </Card>
-    
-    {/* Live Commentary Component */}
-    <LiveCommentaryComponent
-      commentary={liveCommentary}
-      personality={selectedPersonality}
-      isVoiceEnabled={isVoiceEnabled}
-      className="fixed bottom-4 right-4 w-80 z-40"
-      onToggleVoice={() => setIsVoiceEnabled(!isVoiceEnabled)}
-      onClear={clearCommentary}
-    />
     </div>
   );
 };

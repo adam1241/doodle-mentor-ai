@@ -3,6 +3,7 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import axios from 'axios';
 import multer from 'multer';
+import { Mistral } from '@mistralai/mistralai';
 
 dotenv.config();
 
@@ -139,9 +140,74 @@ class ElevenLabsClient {
   }
 }
 
+// Mistral OCR client
+class MistralOCRClient {
+  constructor() {
+    this.apiKey = process.env.MISTRAL_API_KEY;
+    this.client = new Mistral({
+      apiKey: this.apiKey
+    });
+  }
+
+  async extractTextFromImage(imageBase64, imageType = 'image/jpeg') {
+    try {
+      const response = await this.client.chat.complete({
+        model: 'pixtral-12b-2409',
+        messages: [
+          {
+            role: 'user',
+            content: [
+              {
+                type: 'text',
+                text: 'You are helping a student in a competition. Extract ALL text, numbers, equations, and mathematical expressions from this image. Read everything including handwritten text, math problems, calculations, formulas, diagrams with labels, and any written work. Be extremely thorough - scan the entire image. Return exactly what you see written, including partial work and rough calculations. This is critical for real-time tutoring.'
+              },
+              {
+                type: 'image_url',
+                image_url: `data:${imageType};base64,${imageBase64}`
+              }
+            ]
+          }
+        ],
+        max_tokens: 1500,
+        temperature: 0.0 // Maximum accuracy for competition
+      });
+
+      const extractedText = response.choices[0].message.content || '';
+      
+      // Calculate confidence based on response quality
+      const confidence = this.calculateConfidence(extractedText);
+      
+      return {
+        text: extractedText.trim(),
+        confidence: confidence
+      };
+    } catch (error) {
+      console.error('Mistral OCR Error:', error.message);
+      throw new Error('Failed to extract text from image');
+    }
+  }
+
+  calculateConfidence(text) {
+    // Simple confidence calculation based on text characteristics
+    if (!text || text.length === 0) return 0;
+    if (text.length < 3) return 0.3;
+    if (text.includes('I cannot') || text.includes('unable to')) return 0.1;
+    if (text.includes('unclear') || text.includes('blurry')) return 0.4;
+    
+    // Higher confidence for structured content
+    let confidence = 0.7;
+    if (text.match(/\d+/)) confidence += 0.1; // Contains numbers
+    if (text.match(/[+\-*/=]/)) confidence += 0.1; // Contains math symbols
+    if (text.match(/[A-Za-z]{3,}/)) confidence += 0.1; // Contains words
+    
+    return Math.min(confidence, 0.95);
+  }
+}
+
 // Initialize clients
 const cerebrasClient = new CerebrasClient();
 const elevenLabsClient = new ElevenLabsClient();
+const mistralOCRClient = new MistralOCRClient();
 
 // Routes
 
@@ -223,6 +289,40 @@ app.post('/api/voice', async (req, res) => {
     console.error('Voice endpoint error:', error.message);
     res.status(500).json({ 
       error: 'Failed to generate voice',
+      details: error.message 
+    });
+  }
+});
+
+// OCR endpoint using Mistral
+app.post('/api/ocr', upload.single('image'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'Image file is required' });
+    }
+
+    // Convert buffer to base64
+    const imageBase64 = req.file.buffer.toString('base64');
+    const imageType = req.file.mimetype || 'image/jpeg';
+
+    console.log('OCR request - Image type:', imageType);
+    console.log('OCR request - Image size (bytes):', req.file.buffer.length);
+    
+    // Extract text using Mistral OCR
+    const ocrResult = await mistralOCRClient.extractTextFromImage(imageBase64, imageType);
+    
+    console.log('OCR result - Extracted text:', ocrResult.text);
+    console.log('OCR result - Confidence:', ocrResult.confidence);
+
+    res.json({
+      extractedText: ocrResult.text,
+      confidence: ocrResult.confidence,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('OCR endpoint error:', error.message);
+    res.status(500).json({ 
+      error: 'Failed to process OCR request',
       details: error.message 
     });
   }

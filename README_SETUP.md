@@ -9,6 +9,7 @@ This application integrates Cerebras for AI text generation and ElevenLabs for v
 2. **npm** or **yarn**
 3. **Cerebras API Key** - Get from [Cerebras Cloud](https://cloud.cerebras.ai/)
 4. **ElevenLabs API Key** - Get from [ElevenLabs](https://elevenlabs.io/)
+5. **Mistral API Key** - Get from [Mistral AI](https://console.mistral.ai/) (for advanced OCR)
 
 ## Setup Instructions
 
@@ -44,6 +45,9 @@ CEREBRAS_BASE_URL=https://api.cerebras.ai/v1
 ELEVENLABS_API_KEY=your_elevenlabs_api_key_here
 ELEVENLABS_BASE_URL=https://api.elevenlabs.io/v1
 
+# Mistral API Configuration (for OCR)
+MISTRAL_API_KEY=your_mistral_api_key_here
+
 # Server Configuration
 PORT=3001
 NODE_ENV=development
@@ -67,6 +71,27 @@ npm run dev
 
 The frontend will run on http://localhost:8080
 
+## How the Live AI Teacher Works
+
+### Real-time Analysis
+1. **Student writes/draws** on the canvas
+2. **AI detects changes** and waits 2 seconds (to avoid spam)
+3. **Mistral OCR extracts text** from handwriting with high accuracy
+4. **AI analyzes content** for math problems, questions, or learning concepts
+5. **Live feedback appears** in the chat as orange-highlighted messages
+
+### Teaching Behaviors
+- **Math Problems**: Checks answers, points out errors, guides to correct solutions
+- **Questions**: Uses Socratic method - asks back instead of answering directly  
+- **Learning Content**: Tests understanding with follow-up questions
+- **Drawing/Diagrams**: Asks for explanations and checks accuracy
+
+### Controls
+- **"AI Watch" button**: Toggle live analysis on/off
+- **"Upload" button**: Analyze exercise images with advanced OCR
+- **Voice toggle** in chat: Enable/disable voice feedback
+- **Live AI badge**: Shows which messages are real-time feedback
+
 ## API Keys Setup
 
 ### Cerebras API Key
@@ -84,6 +109,13 @@ The frontend will run on http://localhost:8080
 5. Create a new API key
 6. Copy the key to your `.env` file
 
+### Mistral API Key
+1. Visit [Mistral Console](https://console.mistral.ai/)
+2. Sign up or log in
+3. Navigate to API keys section
+4. Create a new API key
+5. Copy the key to your `.env` file
+
 ## Teacher Personalities
 
 The system includes 4 different AI tutor personalities:
@@ -100,20 +132,31 @@ Each personality has:
 
 ## Features
 
+### Live AI Teacher System
+- **Real-time analysis** of student writing and drawing
+- **Socratic method teaching** - guides students to discover answers
+- **Smart error detection** and correction
+- **Live commentary** integrated into chat interface
+- **Advanced OCR** using Mistral AI for better text recognition
+
 ### Chat Functionality
 - Real-time AI responses using Cerebras
 - Voice synthesis using ElevenLabs
 - Personality-based responses
-- Message history
+- Live commentary from canvas analysis
+- Message history with visual distinction for live feedback
 
 ### Canvas Analysis
-- AI analysis of student work
-- Feedback based on selected personality
-- Voice feedback option
+- **Mistral OCR** for superior handwriting recognition
+- **Math problem detection** and step-by-step guidance  
+- **Exercise image analysis** for uploaded worksheets
+- Real-time feedback as students work
+- **Pedagogical responses** that teach rather than just praise
 
 ### Voice Features
 - Toggle voice on/off
-- Personality-specific voice settings
+- Personality-specific voice settings using custom ElevenLabs voices
+- Voice playback for live commentary
 - Fallback to browser TTS if ElevenLabs fails
 
 ## Troubleshooting
@@ -144,6 +187,7 @@ Each personality has:
 - `GET /health` - Health check
 - `POST /api/chat` - Send chat message
 - `POST /api/voice` - Generate voice only
+- `POST /api/ocr` - Extract text from images using Mistral
 - `POST /api/analyze-canvas` - Analyze canvas work
 - `GET /api/personalities` - Get available personalities
 
