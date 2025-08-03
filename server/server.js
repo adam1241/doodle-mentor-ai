@@ -231,16 +231,52 @@ app.post('/api/voice', async (req, res) => {
 // Canvas analysis endpoint
 app.post('/api/analyze-canvas', upload.single('canvas'), async (req, res) => {
   try {
-    const { personality = 'calm', description } = req.body;
+    const { personality = 'calm', description, extractedText, analysisType, triggerReason } = req.body;
     
-    if (!req.file && !description) {
-      return res.status(400).json({ error: 'Canvas image or description is required' });
+    if (!req.file && !description && !extractedText) {
+      return res.status(400).json({ error: 'Canvas image, description, or extracted text is required' });
     }
 
-    // Create analysis prompt based on canvas
-    const analysisPrompt = description 
-      ? `Please analyze this student's work: ${description}`
-      : 'Please analyze the student\'s canvas work and provide feedback.';
+    // Create contextual analysis prompt
+    let analysisPrompt = '';
+    
+    if (triggerReason) {
+      // This is a live commentary request - act like a real teacher
+      analysisPrompt = `You are a teacher standing next to a student. `;
+      switch (triggerReason) {
+        case 'math_content_detected':
+          analysisPrompt += `The student wrote: "${extractedText}". Act like a real math teacher: Check if this is correct, point out any errors you see, ask what their next step should be, or guide them to think deeper about the problem. If it's wrong, tell them specifically what's wrong and ask a question to help them figure out the right approach.`;
+          break;
+        case 'question_detected':
+          analysisPrompt += `The student wrote a question: "${extractedText}". Don't answer directly. Instead, ask them what they think, what they've tried so far, or guide them to break down the question into smaller parts they can solve.`;
+          break;
+        case 'learning_content_detected':
+          analysisPrompt += `Student wrote learning content: "${extractedText}". Act like a teacher checking understanding: Ask them to explain what this means in their own words, give an example, or connect it to something they already know. If it's incomplete or unclear, guide them to think deeper.`;
+          break;
+        case 'text_written':
+          analysisPrompt += `Student wrote: "${extractedText}". Check for understanding by asking what they mean, if they can explain it back, or what the next logical step would be. Point out if anything seems unclear or incorrect.`;
+          break;
+        case 'drawing_activity':
+          analysisPrompt += `The student is drawing/sketching. If it looks like a diagram, graph, or visual problem-solving, ask them to explain what they're showing, check if it's accurate, or guide them to add missing elements. Don't just praise - teach!`;
+          break;
+        default:
+          analysisPrompt += `The student is working. Ask them what they're thinking about, what they're trying to solve, or guide them to the next step in their learning process.`;
+      }
+      analysisPrompt += ' Be direct, specific, and pedagogical like a real teacher. Keep it short (1-2 sentences) and always end with a teaching question that makes them think deeper.';
+    } else if (extractedText) {
+      // OCR-based analysis
+      analysisPrompt = `The student has written/drawn the following content: "${extractedText}". 
+        Analysis type: ${analysisType || 'mixed'}. 
+        Please provide helpful feedback or guidance based on what they've created. 
+        If it contains math problems, help them solve it step by step using the Socratic method. 
+        If it's text or notes, provide encouraging feedback and suggestions.`;
+    } else if (description) {
+      // Description-based analysis
+      analysisPrompt = `Please analyze this student's work: ${description}`;
+    } else {
+      // Generic canvas analysis
+      analysisPrompt = 'Please analyze the student\'s canvas work and provide feedback.';
+    }
 
     const messages = [
       {
@@ -254,7 +290,9 @@ app.post('/api/analyze-canvas', upload.single('canvas'), async (req, res) => {
     const response = {
       analysis: analysisResponse,
       personality: personality,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
+      extractedText: extractedText || '',
+      analysisType: analysisType || 'general'
     };
 
     res.json(response);
