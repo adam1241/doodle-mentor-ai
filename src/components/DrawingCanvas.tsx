@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Canvas as FabricCanvas } from "fabric";
+import { Canvas as FabricCanvas, Line } from "fabric";
 import { Pencil, Square, RotateCcw, Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
@@ -27,6 +27,38 @@ export const DrawingCanvas = ({ className }: DrawingCanvasProps) => {
       backgroundColor: "#ffffff",
     });
 
+    // Add draw.io style grid pattern
+    const addGrid = () => {
+      const gridSize = 20;
+      const canvasWidth = canvas.width || 3000;
+      const canvasHeight = canvas.height || 2000;
+      
+      // Create vertical lines
+      for (let i = 0; i <= canvasWidth; i += gridSize) {
+        const line = new Line([i, 0, i, canvasHeight], {
+          stroke: "#e5e7eb",
+          strokeWidth: 0.5,
+          selectable: false,
+          evented: false,
+          excludeFromExport: true,
+        });
+        canvas.add(line);
+      }
+      
+      // Create horizontal lines
+      for (let i = 0; i <= canvasHeight; i += gridSize) {
+        const line = new Line([0, i, canvasWidth, i], {
+          stroke: "#e5e7eb",
+          strokeWidth: 0.5,
+          selectable: false,
+          evented: false,
+          excludeFromExport: true,
+        });
+        canvas.add(line);
+      }
+      
+    };
+
     // Initialize drawing brush safely
     if (canvas.freeDrawingBrush) {
       canvas.freeDrawingBrush.color = brushColor;
@@ -34,6 +66,7 @@ export const DrawingCanvas = ({ className }: DrawingCanvasProps) => {
     }
     canvas.isDrawingMode = activeTool === "draw";
 
+    addGrid();
     setFabricCanvas(canvas);
     toast("Drawing canvas ready! Start creating!");
 
