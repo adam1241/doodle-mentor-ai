@@ -1,10 +1,10 @@
+
 import { useState } from "react";
 import { BookOpen, Brain } from "lucide-react";
 import { ImageUpload } from "@/components/ImageUpload";
 import { DrawingCanvas } from "@/components/DrawingCanvas";
 import { AIChat } from "@/components/AIChat";
 import { PersonalitySelector } from "@/components/PersonalitySelector";
-import { Card } from "@/components/ui/card";
 
 const Index = () => {
   const [selectedPersonality, setSelectedPersonality] = useState<'calm' | 'angry' | 'cool' | 'lazy'>('calm');
@@ -31,10 +31,13 @@ const Index = () => {
               </div>
             </div>
             
-            <PersonalitySelector
-              selectedPersonality={selectedPersonality}
-              onPersonalityChange={setSelectedPersonality}
-            />
+            <div className="flex items-center gap-4">
+              <ImageUpload onImageUpload={setUploadedImage} />
+              <PersonalitySelector
+                selectedPersonality={selectedPersonality}
+                onPersonalityChange={setSelectedPersonality}
+              />
+            </div>
           </div>
         </div>
       </header>
@@ -42,15 +45,8 @@ const Index = () => {
       {/* Main Content */}
       <div className="container mx-auto px-4 py-6">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-[calc(100vh-120px)]">
-          {/* Left Column - Exercise and Drawing */}
-          <div className="lg:col-span-2 space-y-6">
-            {/* Exercise Upload Section */}
-            <ImageUpload 
-              onImageUpload={setUploadedImage}
-              className="bg-gradient-to-br from-notebook-paper to-card"
-            />
-            
-            {/* Drawing Canvas Section */}
+          {/* Left Column - Drawing Canvas (expanded) */}
+          <div className="lg:col-span-2">
             <div className="space-y-4">
               <div className="flex items-center gap-2">
                 <Brain className="h-5 w-5 text-primary" />
