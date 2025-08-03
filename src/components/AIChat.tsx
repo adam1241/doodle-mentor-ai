@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { Send, Bot, User, Brain, Lightbulb } from "lucide-react";
+import { Send, Bot, User, Brain, Lightbulb, Volume2, VolumeX } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -32,7 +32,46 @@ export const AIChat = ({ className, selectedPersonality, onAnalyzeCanvas }: AICh
   ]);
   const [inputMessage, setInputMessage] = useState("");
   const [isTyping, setIsTyping] = useState(false);
+  const [isVoiceEnabled, setIsVoiceEnabled] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  // Text-to-speech function
+  const speakText = async (text: string) => {
+    if (!isVoiceEnabled) return;
+    
+    try {
+      // For now, we'll use the Web Speech API as a fallback
+      // In production, you should replace this with ElevenLabs API
+      if ('speechSynthesis' in window) {
+        const utterance = new SpeechSynthesisUtterance(text);
+        
+        // Adjust voice characteristics based on personality
+        switch (selectedPersonality) {
+          case 'calm':
+            utterance.rate = 0.8;
+            utterance.pitch = 1.0;
+            break;
+          case 'angry':
+            utterance.rate = 1.2;
+            utterance.pitch = 1.2;
+            utterance.volume = 0.9;
+            break;
+          case 'cool':
+            utterance.rate = 0.9;
+            utterance.pitch = 0.8;
+            break;
+          case 'lazy':
+            utterance.rate = 0.6;
+            utterance.pitch = 0.7;
+            break;
+        }
+        
+        speechSynthesis.speak(utterance);
+      }
+    } catch (error) {
+      console.error('Speech synthesis error:', error);
+    }
+  };
 
   useEffect(() => {
     scrollRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -118,6 +157,7 @@ export const AIChat = ({ className, selectedPersonality, onAnalyzeCanvas }: AICh
 
       setMessages(prev => [...prev, aiResponse]);
       setIsTyping(false);
+      speakText(aiResponse.content);
     }, 1000 + Math.random() * 2000);
   };
 
@@ -153,6 +193,7 @@ export const AIChat = ({ className, selectedPersonality, onAnalyzeCanvas }: AICh
 
       setMessages(prev => [...prev, feedbackMessage]);
       setIsTyping(false);
+      speakText(feedbackMessage.content);
     }, 2000);
   };
 
@@ -189,15 +230,26 @@ export const AIChat = ({ className, selectedPersonality, onAnalyzeCanvas }: AICh
           </div>
         </div>
         
-        <Button 
-          variant="outline" 
-          size="sm" 
-          onClick={handleAnalyzeCanvas}
-          className="gap-2"
-        >
-          <Brain className="h-4 w-4" />
-          Analyze Work
-        </Button>
+        <div className="flex gap-2">
+          <Button 
+            variant="outline" 
+            size="sm" 
+            onClick={() => setIsVoiceEnabled(!isVoiceEnabled)}
+            className="gap-2"
+          >
+            {isVoiceEnabled ? <Volume2 className="h-4 w-4" /> : <VolumeX className="h-4 w-4" />}
+            Voice
+          </Button>
+          <Button 
+            variant="outline" 
+            size="sm" 
+            onClick={handleAnalyzeCanvas}
+            className="gap-2"
+          >
+            <Brain className="h-4 w-4" />
+            Analyze Work
+          </Button>
+        </div>
       </div>
 
       <ScrollArea className="flex-1 p-4">
