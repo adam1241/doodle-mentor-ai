@@ -23,6 +23,7 @@ export const DrawingCanvas = ({ className }: DrawingCanvasProps) => {
   const [startPoint, setStartPoint] = useState<{x: number, y: number} | null>(null);
   const [currentShape, setCurrentShape] = useState<any>(null);
   const [lastRenderTime, setLastRenderTime] = useState(0);
+  const renderTimeoutRef = useRef<number | null>(null);
 
   // Initialize canvas with better precision settings (only once)
   const initializeCanvas = useCallback(() => {
@@ -38,7 +39,17 @@ export const DrawingCanvas = ({ className }: DrawingCanvasProps) => {
       backgroundColor: "#ffffff",
       selection: true,
       preserveObjectStacking: true,
-      renderOnAddRemove: false,
+      renderOnAddRemove: false, // Manual rendering control
+      skipTargetFind: false,
+      allowTouchScrolling: false,
+      imageSmoothingEnabled: true,
+      // Optimize selection appearance
+      selectionColor: 'rgba(37, 99, 235, 0.1)',
+      selectionBorderColor: '#2563eb',
+      selectionLineWidth: 2,
+      selectionDashArray: [5, 5],
+      // Restore high-DPI for crisp rendering
+      enableRetinaScaling: true,
     });
 
     // Set high DPI for crisp rendering
@@ -233,6 +244,8 @@ export const DrawingCanvas = ({ className }: DrawingCanvasProps) => {
             strokeWidth: brushSize,
             selectable: false,
             evented: false, // Disable events during creation
+            hasControls: false,
+            hasBorders: false,
           });
           
           fabricCanvas.add(circle);
@@ -262,6 +275,8 @@ export const DrawingCanvas = ({ className }: DrawingCanvasProps) => {
             strokeWidth: brushSize,
             selectable: false,
             evented: false, // Disable events during creation
+            hasControls: false,
+            hasBorders: false,
           });
           
           fabricCanvas.add(rect);
@@ -284,8 +299,11 @@ export const DrawingCanvas = ({ className }: DrawingCanvasProps) => {
           const line = new Line([pointer.x, pointer.y, pointer.x, pointer.y], {
             stroke: brushColor,
             strokeWidth: brushSize,
+            fill: 'transparent',
             selectable: false,
             evented: false, // Disable events during creation
+            hasControls: false,
+            hasBorders: false,
           });
           
           fabricCanvas.add(line);
@@ -327,9 +345,9 @@ export const DrawingCanvas = ({ className }: DrawingCanvasProps) => {
     const handleMouseMove = (options: any) => {
       if (!isDrawingShape || !startPoint || !currentShape) return;
       
-      // Throttle mouse move events for better performance (16ms = ~60fps)
+      // More aggressive throttling for better performance (33ms = ~30fps)
       const now = Date.now();
-      if (now - lastRenderTime < 16) return;
+      if (now - lastRenderTime < 33) return;
       setLastRenderTime(now);
       
       const pointer = fabricCanvas.getPointer(options.e);
@@ -365,15 +383,20 @@ export const DrawingCanvas = ({ className }: DrawingCanvasProps) => {
         });
       }
       
-      // Use requestAnimationFrame for smoother rendering during shape creation
-      requestAnimationFrame(() => {
+      // Clear any pending render and schedule a new one
+      if (renderTimeoutRef.current) {
+        cancelAnimationFrame(renderTimeoutRef.current);
+      }
+      
+      renderTimeoutRef.current = requestAnimationFrame(() => {
         fabricCanvas.renderAll();
+        renderTimeoutRef.current = null;
       });
     };
 
     const handleMouseUp = () => {
       if (isDrawingShape && currentShape) {
-        // Enable selection and resizing after creation
+        // Enable selection and resizing after creation (using default selection styling)
         currentShape.set({
           selectable: true,
           hasControls: true,
@@ -386,7 +409,11 @@ export const DrawingCanvas = ({ className }: DrawingCanvasProps) => {
         
         // Auto-select the newly created shape for immediate editing
         fabricCanvas.setActiveObject(currentShape);
-        fabricCanvas.renderAll();
+        
+        // Single render call after all changes
+        requestAnimationFrame(() => {
+          fabricCanvas.renderAll();
+        });
       }
       
       // Reset drawing state
