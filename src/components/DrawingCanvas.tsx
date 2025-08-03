@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { Canvas as FabricCanvas, Line, IText, PencilBrush, Circle, Rect } from "fabric";
-import { Pencil, Square, RotateCcw, Download, Type, Circle as CircleIcon, RectangleHorizontal, Eraser } from "lucide-react";
+import { Pencil, Square, RotateCcw, Download, Type, Circle as CircleIcon, RectangleHorizontal, Eraser, Minus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
 import { Card } from "@/components/ui/card";
@@ -15,13 +15,14 @@ export const DrawingCanvas = ({ className }: DrawingCanvasProps) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [fabricCanvas, setFabricCanvas] = useState<FabricCanvas | null>(null);
-  const [activeTool, setActiveTool] = useState<"draw" | "text" | "erase" | "select" | "circle" | "rectangle">("draw");
+  const [activeTool, setActiveTool] = useState<"draw" | "text" | "erase" | "select" | "circle" | "rectangle" | "line">("draw");
   const [brushSize, setBrushSize] = useState(2);
   const [brushColor, setBrushColor] = useState("#2563eb");
   const [showGrid, setShowGrid] = useState(true);
   const [isDrawingShape, setIsDrawingShape] = useState(false);
   const [startPoint, setStartPoint] = useState<{x: number, y: number} | null>(null);
   const [currentShape, setCurrentShape] = useState<any>(null);
+  const [lastRenderTime, setLastRenderTime] = useState(0);
 
   // Initialize canvas with better precision settings (only once)
   const initializeCanvas = useCallback(() => {
@@ -69,6 +70,41 @@ export const DrawingCanvas = ({ className }: DrawingCanvasProps) => {
 
     return canvas;
   }, []); // Empty dependency array - only initialize once
+
+  // Handle keyboard events for delete functionality
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (!fabricCanvas) return;
+      
+      if (e.key === 'Delete' || e.key === 'Backspace') {
+        const activeObject = fabricCanvas.getActiveObject();
+        
+        // Check if user is actively editing text - if so, don't interfere
+        if (activeObject && activeObject.type === 'i-text' && (activeObject as any).isEditing) {
+          return; // Let the text editor handle the key press
+        }
+        
+        const activeObjects = fabricCanvas.getActiveObjects();
+        
+        if (activeObjects.length > 0) {
+          // Delete all selected objects (except grid lines)
+          activeObjects.forEach(obj => {
+            if ((obj as any).name !== 'grid-line') {
+              fabricCanvas.remove(obj);
+            }
+          });
+          fabricCanvas.discardActiveObject();
+          fabricCanvas.renderAll();
+          toast("Selected objects deleted!");
+        }
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [fabricCanvas]);
 
   // Add grid function (separate from initialization)
   const addGrid = useCallback(() => {
@@ -159,61 +195,142 @@ export const DrawingCanvas = ({ className }: DrawingCanvasProps) => {
     const handleMouseDown = (options: any) => {
       const pointer = fabricCanvas.getPointer(options.e);
       
+      // Check if we're clicking on an existing object
+      const target = fabricCanvas.findTarget(options.e);
+      
       if (activeTool === 'text') {
-        const text = new IText('Type here...', {
-          left: pointer.x,
-          top: pointer.y,
-          fontFamily: 'Arial',
-          fontSize: Math.max(16, brushSize),
-          fill: brushColor,
-          editable: true,
-        });
-        fabricCanvas.add(text);
-        fabricCanvas.setActiveObject(text);
-        text.enterEditing();
-        fabricCanvas.renderAll();
+        // Only create text if not clicking on an existing object
+        if (!target || (target as any).name === 'grid-line') {
+          const text = new IText('Type here...', {
+            left: pointer.x,
+            top: pointer.y,
+            fontFamily: 'Arial',
+            fontSize: Math.max(16, brushSize),
+            fill: brushColor,
+            editable: true,
+          });
+          fabricCanvas.add(text);
+          fabricCanvas.setActiveObject(text);
+          text.enterEditing();
+          fabricCanvas.renderAll();
+        }
       } else if (activeTool === 'circle') {
-        // Start creating circle with drag
-        setIsDrawingShape(true);
-        setStartPoint({ x: pointer.x, y: pointer.y });
-        
-        const circle = new Circle({
-          left: pointer.x,
-          top: pointer.y,
-          radius: 1,
-          fill: 'transparent',
-          stroke: brushColor,
-          strokeWidth: brushSize,
-          selectable: false, // Disable selection during creation
-        });
-        
-        fabricCanvas.add(circle);
-        setCurrentShape(circle);
-        fabricCanvas.renderAll();
+        // Only create new circle if not clicking on an existing object
+        if (!target || (target as any).name === 'grid-line') {
+          // Disable selection temporarily during creation
+          fabricCanvas.selection = false;
+          fabricCanvas.discardActiveObject();
+          
+          setIsDrawingShape(true);
+          setStartPoint({ x: pointer.x, y: pointer.y });
+          
+          const circle = new Circle({
+            left: pointer.x,
+            top: pointer.y,
+            radius: 1,
+            fill: 'transparent',
+            stroke: brushColor,
+            strokeWidth: brushSize,
+            selectable: false,
+            evented: false, // Disable events during creation
+          });
+          
+          fabricCanvas.add(circle);
+          setCurrentShape(circle);
+          // Defer rendering for better performance
+          requestAnimationFrame(() => {
+            fabricCanvas.renderAll();
+          });
+        }
       } else if (activeTool === 'rectangle') {
-        // Start creating rectangle with drag
-        setIsDrawingShape(true);
-        setStartPoint({ x: pointer.x, y: pointer.y });
+        // Only create new rectangle if not clicking on an existing object
+        if (!target || (target as any).name === 'grid-line') {
+          // Disable selection temporarily during creation
+          fabricCanvas.selection = false;
+          fabricCanvas.discardActiveObject();
+          
+          setIsDrawingShape(true);
+          setStartPoint({ x: pointer.x, y: pointer.y });
+          
+          const rect = new Rect({
+            left: pointer.x,
+            top: pointer.y,
+            width: 1,
+            height: 1,
+            fill: 'transparent',
+            stroke: brushColor,
+            strokeWidth: brushSize,
+            selectable: false,
+            evented: false, // Disable events during creation
+          });
+          
+          fabricCanvas.add(rect);
+          setCurrentShape(rect);
+          // Defer rendering for better performance
+          requestAnimationFrame(() => {
+            fabricCanvas.renderAll();
+          });
+        }
+      } else if (activeTool === 'line') {
+        // Only create new line if not clicking on an existing object
+        if (!target || (target as any).name === 'grid-line') {
+          // Disable selection temporarily during creation
+          fabricCanvas.selection = false;
+          fabricCanvas.discardActiveObject();
+          
+          setIsDrawingShape(true);
+          setStartPoint({ x: pointer.x, y: pointer.y });
+          
+          const line = new Line([pointer.x, pointer.y, pointer.x, pointer.y], {
+            stroke: brushColor,
+            strokeWidth: brushSize,
+            selectable: false,
+            evented: false, // Disable events during creation
+          });
+          
+          fabricCanvas.add(line);
+          setCurrentShape(line);
+          // Defer rendering for better performance
+          requestAnimationFrame(() => {
+            fabricCanvas.renderAll();
+          });
+        }
+      } else if (activeTool === 'erase') {
+        // Handle eraser functionality
+        const pointer = fabricCanvas.getPointer(options.e);
+        const objects = fabricCanvas.getObjects();
         
-        const rect = new Rect({
-          left: pointer.x,
-          top: pointer.y,
-          width: 1,
-          height: 1,
-          fill: 'transparent',
-          stroke: brushColor,
-          strokeWidth: brushSize,
-          selectable: false, // Disable selection during creation
+        // Find objects to erase (excluding grid lines)
+        const objectsToRemove = objects.filter(obj => {
+          if ((obj as any).name === 'grid-line') return false;
+          
+          // Check if pointer is within object bounds
+          const objBounds = obj.getBoundingRect();
+          return pointer.x >= objBounds.left && 
+                 pointer.x <= objBounds.left + objBounds.width &&
+                 pointer.y >= objBounds.top && 
+                 pointer.y <= objBounds.top + objBounds.height;
         });
         
-        fabricCanvas.add(rect);
-        setCurrentShape(rect);
-        fabricCanvas.renderAll();
+        // Remove found objects
+        objectsToRemove.forEach(obj => fabricCanvas.remove(obj));
+        if (objectsToRemove.length > 0) {
+          // Defer rendering for better performance
+          requestAnimationFrame(() => {
+            fabricCanvas.renderAll();
+          });
+          toast("Objects erased!");
+        }
       }
     };
 
     const handleMouseMove = (options: any) => {
       if (!isDrawingShape || !startPoint || !currentShape) return;
+      
+      // Throttle mouse move events for better performance (16ms = ~60fps)
+      const now = Date.now();
+      if (now - lastRenderTime < 16) return;
+      setLastRenderTime(now);
       
       const pointer = fabricCanvas.getPointer(options.e);
       
@@ -223,7 +340,10 @@ export const DrawingCanvas = ({ className }: DrawingCanvasProps) => {
         const deltaY = pointer.y - startPoint.y;
         const radius = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
         
+        // Update circle with center-based positioning
         currentShape.set({
+          left: startPoint.x - radius,
+          top: startPoint.y - radius,
           radius: Math.max(5, radius),
         });
       } else if (activeTool === 'rectangle') {
@@ -237,9 +357,18 @@ export const DrawingCanvas = ({ className }: DrawingCanvasProps) => {
           width: Math.max(5, width),
           height: Math.max(5, height),
         });
+      } else if (activeTool === 'line') {
+        // Update line end point
+        currentShape.set({
+          x2: pointer.x,
+          y2: pointer.y,
+        });
       }
       
-      fabricCanvas.renderAll();
+      // Use requestAnimationFrame for smoother rendering during shape creation
+      requestAnimationFrame(() => {
+        fabricCanvas.renderAll();
+      });
     };
 
     const handleMouseUp = () => {
@@ -249,7 +378,11 @@ export const DrawingCanvas = ({ className }: DrawingCanvasProps) => {
           selectable: true,
           hasControls: true,
           hasBorders: true,
+          evented: true, // Re-enable events
         });
+        
+        // Re-enable canvas selection
+        fabricCanvas.selection = true;
         
         // Auto-select the newly created shape for immediate editing
         fabricCanvas.setActiveObject(currentShape);
@@ -278,8 +411,12 @@ export const DrawingCanvas = ({ className }: DrawingCanvasProps) => {
     if (!fabricCanvas) return;
 
     // Set drawing mode and selection based on active tool
-    fabricCanvas.isDrawingMode = activeTool === "draw" || activeTool === "erase";
-    fabricCanvas.selection = activeTool === "select" || activeTool === "circle" || activeTool === "rectangle" || activeTool === "text";
+    fabricCanvas.isDrawingMode = activeTool === "draw";
+    
+    // Only enable selection when not actively drawing shapes
+    if (!isDrawingShape) {
+      fabricCanvas.selection = activeTool === "select" || activeTool === "circle" || activeTool === "rectangle" || activeTool === "text" || activeTool === "line";
+    }
     
     // Update brush properties
     if (fabricCanvas.freeDrawingBrush) {
@@ -287,33 +424,39 @@ export const DrawingCanvas = ({ className }: DrawingCanvasProps) => {
       fabricCanvas.freeDrawingBrush.width = brushSize;
     }
     
-    // Handle eraser mode
+    // Handle eraser mode with custom logic to avoid erasing grid
     if (activeTool === "erase") {
-      fabricCanvas.isDrawingMode = true;
-      if (fabricCanvas.freeDrawingBrush) {
-        fabricCanvas.freeDrawingBrush.color = "#ffffff";
-        fabricCanvas.freeDrawingBrush.width = brushSize * 2;
-      }
+      fabricCanvas.isDrawingMode = false; // Disable free drawing mode for eraser
     }
     
-    // Enable object controls for shape and text tools
-    if (activeTool === "select" || activeTool === "circle" || activeTool === "rectangle" || activeTool === "text") {
+    // Configure object controls based on active tool
+    if (activeTool === "select" || activeTool === "circle" || activeTool === "rectangle" || activeTool === "text" || activeTool === "line") {
       fabricCanvas.getObjects().forEach(obj => {
-        if (obj.type === 'circle' || obj.type === 'rect' || obj.type === 'i-text') {
+        if (obj.type === 'circle' || obj.type === 'rect' || obj.type === 'i-text' || obj.type === 'line') {
           obj.set({
             selectable: true,
             hasControls: true,
             hasBorders: true,
+            evented: true,
           });
         }
       });
-    } else {
+    } else if (activeTool === "draw" || activeTool === "erase") {
       // Disable selection for drawing tools to prevent accidental selection
       fabricCanvas.discardActiveObject();
+      fabricCanvas.getObjects().forEach(obj => {
+        if (obj.type === 'circle' || obj.type === 'rect' || obj.type === 'i-text' || obj.type === 'line') {
+          obj.set({
+            selectable: false,
+            hasControls: false,
+            hasBorders: false,
+          });
+        }
+      });
     }
     
     fabricCanvas.renderAll();
-  }, [activeTool, brushColor, brushSize, fabricCanvas]);
+  }, [activeTool, brushColor, brushSize, fabricCanvas, isDrawingShape]);
 
   const handleClearCanvas = () => {
     if (!fabricCanvas) return;
@@ -416,6 +559,16 @@ export const DrawingCanvas = ({ className }: DrawingCanvasProps) => {
             >
               <RectangleHorizontal className="h-4 w-4" />
               Rectangle
+            </Button>
+            
+            <Button
+              variant={activeTool === "line" ? "default" : "outline"}
+              size="sm"
+              onClick={() => setActiveTool("line")}
+              className="gap-2"
+            >
+              <Minus className="h-4 w-4" />
+              Line
             </Button>
             
             <Button
