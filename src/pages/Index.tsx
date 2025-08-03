@@ -54,7 +54,10 @@ const Index = () => {
                 <p className="text-sm text-muted-foreground">Draw, write, and solve your exercise here</p>
               </div>
               
-              <DrawingCanvas className="bg-gradient-to-br from-canvas-bg to-notebook-paper shadow-notebook" />
+              <DrawingCanvas 
+                className="bg-gradient-to-br from-canvas-bg to-notebook-paper shadow-notebook"
+                selectedPersonality={selectedPersonality}
+              />
             </div>
           </div>
 
