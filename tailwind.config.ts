@@ -52,6 +52,23 @@ export default {
 					DEFAULT: 'hsl(var(--card))',
 					foreground: 'hsl(var(--card-foreground))'
 				},
+				// Educational theme colors
+				notebook: {
+					paper: 'hsl(var(--notebook-paper))',
+					lines: 'hsl(var(--notebook-lines))',
+				},
+				pencil: 'hsl(var(--pencil-gray))',
+				eraser: 'hsl(var(--eraser-pink))',
+				canvas: {
+					bg: 'hsl(var(--canvas-bg))',
+					border: 'hsl(var(--canvas-border))',
+				},
+				ai: {
+					calm: 'hsl(var(--ai-calm))',
+					angry: 'hsl(var(--ai-angry))',
+					cool: 'hsl(var(--ai-cool))',
+					lazy: 'hsl(var(--ai-lazy))',
+				},
 				sidebar: {
 					DEFAULT: 'hsl(var(--sidebar-background))',
 					foreground: 'hsl(var(--sidebar-foreground))',
