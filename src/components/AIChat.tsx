@@ -1,10 +1,12 @@
-import { useState, useRef, useEffect } from "react";
-import { Send, Bot, User, Brain, Lightbulb, Volume2, VolumeX } from "lucide-react";
+import { useState, useRef, useEffect, useCallback } from "react";
+import { Send, Bot, User, Brain, Lightbulb, Volume2, VolumeX, AlertCircle } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { ApiService, ChatMessage } from "@/services/api";
 
 interface Message {
   id: string;
@@ -21,27 +23,75 @@ interface AIChatProps {
 }
 
 export const AIChat = ({ className, selectedPersonality, onAnalyzeCanvas }: AIChatProps) => {
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      id: '1',
-      content: `Hi! I'm your ${selectedPersonality} AI tutor. Upload an exercise and I'll help you solve it step by step!`,
-      isUser: false,
-      timestamp: new Date(),
-      type: 'help'
-    }
-  ]);
+  const [messages, setMessages] = useState<Message[]>([]);
   const [inputMessage, setInputMessage] = useState("");
   const [isTyping, setIsTyping] = useState(false);
   const [isVoiceEnabled, setIsVoiceEnabled] = useState(false);
+  const [backendError, setBackendError] = useState<string>("");
+  const [isBackendConnected, setIsBackendConnected] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const audioRef = useRef<HTMLAudioElement>(null);
 
-  // Text-to-speech function
-  const speakText = async (text: string) => {
+  // Check backend connection
+  const checkBackendConnection = useCallback(async () => {
+    try {
+      const isConnected = await ApiService.checkHealth();
+      setIsBackendConnected(isConnected);
+      if (!isConnected) {
+        setBackendError("Backend server is not running. Please start the server first.");
+      } else {
+        setBackendError("");
+      }
+    } catch (error) {
+      setIsBackendConnected(false);
+      setBackendError("Failed to connect to backend server.");
+    }
+  }, []);
+
+  // Play audio from base64 or blob
+  const playAudio = useCallback(async (audioData?: string, audioBlob?: Blob) => {
     if (!isVoiceEnabled) return;
     
     try {
-      // For now, we'll use the Web Speech API as a fallback
-      // In production, you should replace this with ElevenLabs API
+      let audioUrl: string;
+      
+      if (audioData) {
+        // Convert base64 to blob and create URL
+        const byteCharacters = atob(audioData);
+        const byteNumbers = new Array(byteCharacters.length);
+        for (let i = 0; i < byteCharacters.length; i++) {
+          byteNumbers[i] = byteCharacters.charCodeAt(i);
+        }
+        const byteArray = new Uint8Array(byteNumbers);
+        const blob = new Blob([byteArray], { type: 'audio/mpeg' });
+        audioUrl = URL.createObjectURL(blob);
+      } else if (audioBlob) {
+        audioUrl = URL.createObjectURL(audioBlob);
+      } else {
+        return;
+      }
+
+      if (audioRef.current) {
+        audioRef.current.src = audioUrl;
+        await audioRef.current.play();
+        
+        // Clean up URL after playing
+        audioRef.current.onended = () => {
+          URL.revokeObjectURL(audioUrl);
+        };
+      }
+    } catch (error) {
+      console.error('Audio playback error:', error);
+      // Fallback to text-to-speech if audio fails
+      await fallbackTextToSpeech(audioData ? '' : '');
+    }
+  }, [isVoiceEnabled]);
+
+  // Fallback text-to-speech function
+  const fallbackTextToSpeech = async (text: string) => {
+    if (!isVoiceEnabled || !text) return;
+    
+    try {
       if ('speechSynthesis' in window) {
         const utterance = new SpeechSynthesisUtterance(text);
         
@@ -77,6 +127,11 @@ export const AIChat = ({ className, selectedPersonality, onAnalyzeCanvas }: AICh
     scrollRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
+  // Check backend connection on component mount
+  useEffect(() => {
+    checkBackendConnection();
+  }, [checkBackendConnection]);
+
   // Update greeting message when personality changes
   useEffect(() => {
     const personalityGreetings = {
@@ -86,7 +141,7 @@ export const AIChat = ({ className, selectedPersonality, onAnalyzeCanvas }: AICh
       lazy: "Oh... hi... I'm your... *yawn* ...laid-back tutor. Don't worry, we'll figure this out... eventually... 😴"
     };
 
-    setMessages(prev => [
+    setMessages([
       {
         id: Date.now().toString(),
         content: personalityGreetings[selectedPersonality],
@@ -97,42 +152,18 @@ export const AIChat = ({ className, selectedPersonality, onAnalyzeCanvas }: AICh
     ]);
   }, [selectedPersonality]);
 
-  const generateAIResponse = (userMessage: string, personality: string): string => {
-    const responses = {
-      calm: {
-        general: "That's a thoughtful question. Let me help you understand this step by step...",
-        encouragement: "You're doing great! Keep going at your own pace.",
-        analysis: "I can see you're working on this problem. Let me analyze your approach..."
-      },
-      angry: {
-        general: "FOCUS! The answer is right in front of you! Let me break it down...",
-        encouragement: "Come on! You can do better than this! Push harder!",
-        analysis: "I see what you're doing wrong! Listen carefully and fix these mistakes..."
-      },
-      cool: {
-        general: "That's a solid question! Here's the smooth way to handle it...",
-        encouragement: "Nice work! You're getting the hang of this! 🚀",
-        analysis: "I'm checking out your work... Looking pretty good so far!"
-      },
-      lazy: {
-        general: "Ugh... fine... let me explain this... *sigh*... it's actually pretty simple...",
-        encouragement: "Yeah... that's... okay I guess... keep going...",
-        analysis: "Let me take a look... *yawn*... oh yeah, I see what's happening here..."
-      }
-    };
-
-    // Simple keyword matching for demonstration
-    if (userMessage.toLowerCase().includes('help') || userMessage.toLowerCase().includes('stuck')) {
-      return responses[personality as keyof typeof responses].encouragement;
-    } else if (userMessage.toLowerCase().includes('analyze') || userMessage.toLowerCase().includes('check')) {
-      return responses[personality as keyof typeof responses].analysis;
-    } else {
-      return responses[personality as keyof typeof responses].general;
-    }
+  // Convert messages to chat format for API
+  const convertToChatMessages = (messages: Message[]): ChatMessage[] => {
+    return messages
+      .filter(msg => msg.isUser || !msg.type || msg.type === 'feedback')
+      .map(msg => ({
+        role: msg.isUser ? 'user' as const : 'assistant' as const,
+        content: msg.content
+      }));
   };
 
   const handleSendMessage = async () => {
-    if (!inputMessage.trim()) return;
+    if (!inputMessage.trim() || !isBackendConnected) return;
 
     const userMessage: Message = {
       id: Date.now().toString(),
@@ -141,27 +172,63 @@ export const AIChat = ({ className, selectedPersonality, onAnalyzeCanvas }: AICh
       timestamp: new Date()
     };
 
+    const currentInput = inputMessage;
     setMessages(prev => [...prev, userMessage]);
     setInputMessage("");
     setIsTyping(true);
+    setBackendError("");
 
-    // Simulate AI thinking time
-    setTimeout(() => {
+    try {
+      // Convert current messages to chat format
+      const chatMessages = convertToChatMessages([...messages, userMessage]);
+      
+      // Send to backend API
+      const response = await ApiService.sendChatMessage(
+        chatMessages, 
+        selectedPersonality, 
+        isVoiceEnabled
+      );
+
       const aiResponse: Message = {
-        id: (Date.now() + 1).toString(),
-        content: generateAIResponse(inputMessage, selectedPersonality),
+        id: Date.now().toString(),
+        content: response.message,
         isUser: false,
-        timestamp: new Date(),
+        timestamp: new Date(response.timestamp),
         type: 'feedback'
       };
 
       setMessages(prev => [...prev, aiResponse]);
+      
+      // Play audio if available
+      if (response.audio) {
+        await playAudio(response.audio);
+      } else if (isVoiceEnabled) {
+        // Fallback to text-to-speech
+        await fallbackTextToSpeech(response.message);
+      }
+      
+    } catch (error) {
+      console.error('Chat error:', error);
+      setBackendError("Failed to get AI response. Please try again.");
+      
+      // Add error message to chat
+      const errorMessage: Message = {
+        id: Date.now().toString(),
+        content: "Sorry, I'm having trouble connecting right now. Please try again later.",
+        isUser: false,
+        timestamp: new Date(),
+        type: 'feedback'
+      };
+      
+      setMessages(prev => [...prev, errorMessage]);
+    } finally {
       setIsTyping(false);
-      speakText(aiResponse.content);
-    }, 1000 + Math.random() * 2000);
+    }
   };
 
-  const handleAnalyzeCanvas = () => {
+  const handleAnalyzeCanvas = async () => {
+    if (!isBackendConnected) return;
+    
     onAnalyzeCanvas?.();
     
     const analysisMessage: Message = {
@@ -174,27 +241,53 @@ export const AIChat = ({ className, selectedPersonality, onAnalyzeCanvas }: AICh
 
     setMessages(prev => [...prev, analysisMessage]);
     setIsTyping(true);
+    setBackendError("");
 
-    setTimeout(() => {
-      const responses = {
-        calm: "I can see you've made some good progress. Here are some gentle suggestions to improve your solution...",
-        angry: "WHAT IS THIS?! You're making basic mistakes! Fix these errors immediately!",
-        cool: "Not bad at all! I can see some clever thinking here. Just a few tweaks and you'll nail it!",
-        lazy: "Mmm... yeah... that's... actually not terrible... maybe try... *yawn* ...changing this part..."
-      };
+    try {
+      // For now, we'll send a description of the canvas analysis request
+      const response = await ApiService.analyzeCanvas(
+        undefined, 
+        "Please analyze the student's current work on the canvas and provide feedback based on their drawing or mathematical work.",
+        selectedPersonality
+      );
 
       const feedbackMessage: Message = {
-        id: (Date.now() + 1).toString(),
-        content: responses[selectedPersonality],
+        id: Date.now().toString(),
+        content: response.analysis,
         isUser: false,
-        timestamp: new Date(),
+        timestamp: new Date(response.timestamp),
         type: 'analysis'
       };
 
       setMessages(prev => [...prev, feedbackMessage]);
+      
+      // Generate voice for analysis if enabled
+      if (isVoiceEnabled) {
+        try {
+          const audioBlob = await ApiService.generateVoice(response.analysis, selectedPersonality);
+          await playAudio(undefined, audioBlob);
+        } catch (voiceError) {
+          console.error('Voice generation failed:', voiceError);
+          await fallbackTextToSpeech(response.analysis);
+        }
+      }
+      
+    } catch (error) {
+      console.error('Canvas analysis error:', error);
+      setBackendError("Failed to analyze canvas. Please try again.");
+      
+      const errorMessage: Message = {
+        id: Date.now().toString(),
+        content: "Sorry, I couldn't analyze your work right now. Please try again later.",
+        isUser: false,
+        timestamp: new Date(),
+        type: 'analysis'
+      };
+      
+      setMessages(prev => [...prev, errorMessage]);
+    } finally {
       setIsTyping(false);
-      speakText(feedbackMessage.content);
-    }, 2000);
+    }
   };
 
   const getMessageIcon = (type?: string) => {
@@ -217,13 +310,31 @@ export const AIChat = ({ className, selectedPersonality, onAnalyzeCanvas }: AICh
 
   return (
     <Card className={`flex flex-col h-[600px] ${className}`}>
+      {/* Hidden audio element for playing ElevenLabs audio */}
+      <audio ref={audioRef} style={{ display: 'none' }} />
+      
+      {/* Backend connection error alert */}
+      {backendError && (
+        <Alert className="m-4 mb-0">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>{backendError}</AlertDescription>
+        </Alert>
+      )}
+      
       <div className="flex items-center justify-between p-4 border-b">
         <div className="flex items-center gap-2">
           <div className={`p-2 rounded-full bg-${getPersonalityColor()}/20`}>
             <Bot className={`h-5 w-5 text-${getPersonalityColor()}`} />
           </div>
           <div>
-            <h3 className="font-semibold text-foreground">AI Tutor</h3>
+            <div className="flex items-center gap-2">
+              <h3 className="font-semibold text-foreground">AI Tutor</h3>
+              {isBackendConnected ? (
+                <div className="w-2 h-2 bg-green-500 rounded-full" title="Connected to backend" />
+              ) : (
+                <div className="w-2 h-2 bg-red-500 rounded-full" title="Backend disconnected" />
+              )}
+            </div>
             <Badge variant="secondary" className="text-xs">
               {selectedPersonality.charAt(0).toUpperCase() + selectedPersonality.slice(1)} Mode
             </Badge>
@@ -319,7 +430,7 @@ export const AIChat = ({ className, selectedPersonality, onAnalyzeCanvas }: AICh
           />
           <Button 
             onClick={handleSendMessage} 
-            disabled={!inputMessage.trim() || isTyping}
+            disabled={!inputMessage.trim() || isTyping || !isBackendConnected}
             size="sm"
           >
             <Send className="h-4 w-4" />
