@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Brain, Zap, Glasses, Coffee, ChevronDown } from "lucide-react";
+import { Target, Heart, MessageCircle, Fish, ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Card } from "@/components/ui/card";
@@ -34,7 +34,7 @@ export const PersonalitySelector = ({
       id: 'calm',
       name: 'Winie',
       description: 'Patient and encouraging, explains things step by step',
-      icon: <Brain className="h-5 w-5" />,
+      icon: <Heart className="h-5 w-5" />,
       color: 'text-ai-calm',
       bgColor: 'bg-ai-calm/20'
     },
@@ -42,7 +42,7 @@ export const PersonalitySelector = ({
       id: 'angry',
       name: 'Machinegun',
       description: 'Fast-paced and intense, rapid-fire teaching style',
-      icon: <Zap className="h-5 w-5" />,
+      icon: <Target className="h-5 w-5" />,
       color: 'text-ai-angry',
       bgColor: 'bg-ai-angry/20'
     },
@@ -50,7 +50,7 @@ export const PersonalitySelector = ({
       id: 'cool',
       name: 'Blabla Teacher',
       description: 'Non-stopping talkative teacher, loves to explain everything',
-      icon: <Glasses className="h-5 w-5" />,
+      icon: <MessageCircle className="h-5 w-5" />,
       color: 'text-ai-cool',
       bgColor: 'bg-ai-cool/20'
     },
@@ -58,7 +58,7 @@ export const PersonalitySelector = ({
       id: 'lazy',
       name: 'Sad Fish',
       description: 'Melancholic and thoughtful, teaches with quiet wisdom',
-      icon: <Coffee className="h-5 w-5" />,
+      icon: <Fish className="h-5 w-5" />,
       color: 'text-ai-lazy',
       bgColor: 'bg-ai-lazy/20'
     }
