@@ -3,10 +3,10 @@ import { Send, Bot, User, Brain, Lightbulb, Volume2, VolumeX, AlertCircle } from
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { ApiService, ChatMessage } from "@/services/api";
+
 
 interface Message {
   id: string;
@@ -29,6 +29,7 @@ export const AIChat = ({ className, selectedPersonality, onAnalyzeCanvas }: AICh
   const [isVoiceEnabled, setIsVoiceEnabled] = useState(false);
   const [backendError, setBackendError] = useState<string>("");
   const [isBackendConnected, setIsBackendConnected] = useState(false);
+  const [isPlaying, setIsPlaying] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
 
@@ -48,14 +49,36 @@ export const AIChat = ({ className, selectedPersonality, onAnalyzeCanvas }: AICh
     }
   }, []);
 
+  // Stop all audio playback
+  const stopAudio = useCallback(() => {
+    // Stop HTML5 audio
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.currentTime = 0;
+    }
+    
+    // Stop speech synthesis
+    if ('speechSynthesis' in window) {
+      speechSynthesis.cancel();
+    }
+    
+    setIsPlaying(false);
+  }, []);
+
   // Play audio from base64 or blob
   const playAudio = useCallback(async (audioData?: string, audioBlob?: Blob) => {
-    if (!isVoiceEnabled) return;
+    if (!isVoiceEnabled) {
+      console.log('🔇 Voice disabled, skipping audio playback');
+      return;
+    }
+    
+    console.log('🎧 Starting audio playback...');
     
     try {
       let audioUrl: string;
       
       if (audioData) {
+        console.log('📥 Converting base64 audio data to blob...');
         // Convert base64 to blob and create URL
         const byteCharacters = atob(audioData);
         const byteNumbers = new Array(byteCharacters.length);
@@ -65,25 +88,50 @@ export const AIChat = ({ className, selectedPersonality, onAnalyzeCanvas }: AICh
         const byteArray = new Uint8Array(byteNumbers);
         const blob = new Blob([byteArray], { type: 'audio/mpeg' });
         audioUrl = URL.createObjectURL(blob);
+        console.log('✅ Audio blob created, size:', blob.size, 'bytes');
       } else if (audioBlob) {
         audioUrl = URL.createObjectURL(audioBlob);
+        console.log('✅ Audio URL created from provided blob');
       } else {
+        console.log('❌ No audio data provided');
         return;
       }
 
       if (audioRef.current) {
+        console.log('🎵 Setting audio source and attempting to play...');
         audioRef.current.src = audioUrl;
+        setIsPlaying(true);
+        
+        // Add error handler
+        audioRef.current.onerror = (e) => {
+          console.error('❌ Audio element error:', e);
+          setIsPlaying(false);
+        };
+        
         await audioRef.current.play();
+        console.log('✅ Audio playback started successfully');
         
         // Clean up URL after playing
         audioRef.current.onended = () => {
+          console.log('🏁 Audio playback ended');
           URL.revokeObjectURL(audioUrl);
+          setIsPlaying(false);
         };
+        
+        // Handle pause/stop events
+        audioRef.current.onpause = () => {
+          console.log('⏸️ Audio playback paused');
+          setIsPlaying(false);
+        };
+      } else {
+        console.error('❌ Audio ref not available');
       }
     } catch (error) {
-      console.error('Audio playback error:', error);
+      console.error('❌ Audio playback error:', error);
+      setIsPlaying(false);
       // Fallback to text-to-speech if audio fails
-      await fallbackTextToSpeech(audioData ? '' : '');
+      console.log('🔄 Falling back to browser TTS due to audio error');
+      await fallbackTextToSpeech('');
     }
   }, [isVoiceEnabled]);
 
@@ -152,6 +200,18 @@ export const AIChat = ({ className, selectedPersonality, onAnalyzeCanvas }: AICh
     ]);
   }, [selectedPersonality]);
 
+  // Auto-scroll to bottom when messages change (important for long conversations)
+  useEffect(() => {
+    scrollRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
+
+    
+  useEffect(()=>{
+    if(typeof window?.MathJax !== "undefined"){
+      window.MathJax.typeset()
+    }
+  },[messages])
+
   // Convert messages to chat format for API
   const convertToChatMessages = (messages: Message[]): ChatMessage[] => {
     return messages
@@ -172,7 +232,6 @@ export const AIChat = ({ className, selectedPersonality, onAnalyzeCanvas }: AICh
       timestamp: new Date()
     };
 
-    const currentInput = inputMessage;
     setMessages(prev => [...prev, userMessage]);
     setInputMessage("");
     setIsTyping(true);
@@ -309,7 +368,7 @@ export const AIChat = ({ className, selectedPersonality, onAnalyzeCanvas }: AICh
   };
 
   return (
-    <Card className={`flex flex-col h-[600px] ${className}`}>
+    <Card className={`flex flex-col h-full ${className} min-h-0`}>
       {/* Hidden audio element for playing ElevenLabs audio */}
       <audio ref={audioRef} style={{ display: 'none' }} />
       
@@ -345,11 +404,19 @@ export const AIChat = ({ className, selectedPersonality, onAnalyzeCanvas }: AICh
           <Button 
             variant="outline" 
             size="sm" 
-            onClick={() => setIsVoiceEnabled(!isVoiceEnabled)}
-            className="gap-2"
+            onClick={() => {
+              const newVoiceState = !isVoiceEnabled;
+              setIsVoiceEnabled(newVoiceState);
+              
+              // Stop any playing audio when voice is disabled
+              if (!newVoiceState) {
+                stopAudio();
+              }
+            }}
+            className={`gap-2 ${isPlaying ? 'bg-green-100 border-green-300' : ''}`}
           >
             {isVoiceEnabled ? <Volume2 className="h-4 w-4" /> : <VolumeX className="h-4 w-4" />}
-            Voice
+            {isPlaying ? 'Stop Voice' : 'Voice'}
           </Button>
           <Button 
             variant="outline" 
@@ -363,8 +430,8 @@ export const AIChat = ({ className, selectedPersonality, onAnalyzeCanvas }: AICh
         </div>
       </div>
 
-      <ScrollArea className="flex-1 p-4">
-        <div className="space-y-4">
+      <div className="flex-1 p-4">
+        <div className="space-y-4 overflow-y-auto " style={{ minHeight: 'calc(100vh - 280px)', maxHeight: 'calc(100vh - 280px)', position: 'relative' }}>
           {messages.map((message) => (
             <div
               key={message.id}
@@ -380,11 +447,17 @@ export const AIChat = ({ className, selectedPersonality, onAnalyzeCanvas }: AICh
                 className={`max-w-[80%] p-3 rounded-lg ${
                   message.isUser
                     ? 'bg-primary text-primary-foreground'
-                    : 'bg-muted text-muted-foreground'
+                    : 'bg-card text-card-foreground border shadow-sm'
                 }`}
               >
-                <p className="text-sm">{message.content}</p>
-                <span className="text-xs opacity-70 mt-1 block">
+                {message.isUser ? (
+                  <p className="text-sm font-medium">{message.content}</p>
+                ) : (
+                  <p className="text-sm font-medium text-foreground">{message.content}</p>
+                )}
+                <span className={`text-xs mt-1 block ${
+                  message.isUser ? 'opacity-70' : 'opacity-60 text-muted-foreground'
+                }`}>
                   {message.timestamp.toLocaleTimeString([], { 
                     hour: '2-digit', 
                     minute: '2-digit' 
@@ -405,7 +478,7 @@ export const AIChat = ({ className, selectedPersonality, onAnalyzeCanvas }: AICh
               <div className={`p-2 rounded-full bg-${getPersonalityColor()}/20 flex-shrink-0`}>
                 <Bot className="h-4 w-4" />
               </div>
-              <div className="bg-muted text-muted-foreground p-3 rounded-lg">
+              <div className="bg-card text-foreground p-3 rounded-lg border shadow-sm">
                 <div className="flex gap-1">
                   <div className="w-2 h-2 bg-current rounded-full animate-bounce"></div>
                   <div className="w-2 h-2 bg-current rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
@@ -417,7 +490,7 @@ export const AIChat = ({ className, selectedPersonality, onAnalyzeCanvas }: AICh
           
           <div ref={scrollRef} />
         </div>
-      </ScrollArea>
+      </div>
 
       <div className="p-4 border-t">
         <div className="flex gap-2">

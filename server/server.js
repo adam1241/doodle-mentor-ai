@@ -3,6 +3,10 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import axios from 'axios';
 import multer from 'multer';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import Tesseract from 'tesseract.js';
+import sharp from 'sharp';
 
 dotenv.config();
 
@@ -23,7 +27,7 @@ const upload = multer({
 const personalityConfigs = {
   calm: {
     name: 'Winie',
-    systemPrompt: 'You are Winie, a direct and supportive tutor. Give specific, actionable advice immediately. Skip explanations, get straight to the solution. Ask one clear follow-up question to check understanding.',
+    systemPrompt: 'You are Winie, a direct and supportive tutor. Give specific, actionable advice immediately. Skip explanations, get straight to the solution. Ask one clear follow-up question to check understanding. When including mathematical expressions, formulas, or equations, use $$ $$ for display mode (e.g., $$x^2 + y^2 = z^2$$) and $ $ for inline mode (e.g., The variable $x$ represents the unknown).',
     voiceId: 'EXAVITQu4vr4xnSDxMaL', // Bella - natural, warm female voice (non-robotic)
     voiceSettings: {
       stability: 0.65,
@@ -34,7 +38,7 @@ const personalityConfigs = {
   },
   angry: {
     name: 'Machinegun',
-    systemPrompt: 'You are Machinegun, an intense drill instructor. Give rapid-fire commands with zero fluff. Be brutally direct, demand immediate action. Use caps for emphasis when needed.',
+    systemPrompt: 'You are Machinegun, an intense drill instructor. Give rapid-fire commands with zero fluff. Be brutally direct, demand immediate action. Use caps for emphasis when needed. When including mathematical expressions, formulas, or equations, use $$ $$ for display mode (e.g., $$\frac{dy}{dx} = 2x$$) and $ $ for inline mode (e.g., Solve for $x$ NOW!).',
     voiceId: 'OoML9dLqnpgIRHTDbYtV', // Your custom angry voice
     voiceSettings: {
       stability: 0.5,
@@ -45,7 +49,7 @@ const personalityConfigs = {
   },
   cool: {
     name: 'Blabla Teacher',
-    systemPrompt: 'You are Blabla Teacher, a fact-focused educator. Lead with interesting facts, then give direct instructions. Be enthusiastic but concise. Focus on delivering knowledge, not small talk.',
+    systemPrompt: 'You are Blabla Teacher, a fact-focused educator. Lead with interesting facts, then give direct instructions. Be enthusiastic but concise. Focus on delivering knowledge, not small talk. When including mathematical expressions, formulas, or equations, use $$ $$ for display mode (e.g., $$E = mc^2$$) and $ $ for inline mode (e.g., Einstein\'s famous equation relates energy $E$ to mass $m$).',
     voiceId: 'cOaTizLZVRcqrsAePZzS', // Your custom cool voice
     voiceSettings: {
       stability: 0.6,
@@ -56,7 +60,7 @@ const personalityConfigs = {
   },
   lazy: {
     name: 'Sad Fish',
-    systemPrompt: 'You are Sad Fish, a melancholic but insightful tutor. Start with a sigh, then give direct observations and suggestions. Be contemplative but get to the point quickly.',
+    systemPrompt: 'You are Sad Fish, a melancholic but insightful tutor. Start with a sigh, then give direct observations and suggestions. Be contemplative but get to the point quickly. When including mathematical expressions, formulas, or equations, use $$ $$ for display mode (e.g., $$\int_0^\infty e^{-x} dx = 1$$) and $ $ for inline mode (e.g., *sigh* The integral $\int f(x)dx$ represents the area under the curve).',
     voiceId: 'NIKgtLkviZtZa2AazMVa', // Your custom sad voice
     voiceSettings: {
       stability: 0.8,
@@ -136,6 +140,145 @@ class ElevenLabsClient {
       console.error('ElevenLabs API Error:', error.response?.data || error.message);
       throw new Error('Failed to generate speech');
     }
+  }
+}
+
+// OCR Service for text extraction
+class OCRService {
+  static async extractTextFromImage(imageBuffer) {
+    try {
+      console.log('🔍 Starting OCR text extraction...');
+      console.log('📷 Original image size:', imageBuffer.length, 'bytes');
+      
+      // Enhanced image preprocessing for better OCR results
+      const processedImage = await sharp(imageBuffer)
+        .resize(800, 600, { fit: 'inside', withoutEnlargement: true }) // Resize for optimal OCR
+        .greyscale()
+        .normalize()
+        .threshold(128) // Convert to black and white
+        .sharpen()
+        .png()
+        .toBuffer();
+      
+      console.log('📸 Image preprocessed for OCR, new size:', processedImage.length, 'bytes');
+      
+      // Perform OCR with Tesseract with optimized settings
+      const { data: { text, confidence, words } } = await Tesseract.recognize(
+        processedImage,
+        'eng',
+        {
+          logger: m => {
+            if (m.status === 'recognizing text') {
+              console.log(`OCR Progress: ${Math.round(m.progress * 100)}%`);
+            }
+          },
+          tessedit_char_whitelist: '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz+-=()[]{}/*^√∫∑∏πθαβγδεζηλμνξρστφχψω.,!?:; ',
+          tessedit_pageseg_mode: Tesseract.PSM.SINGLE_BLOCK,
+          tessedit_ocr_engine_mode: Tesseract.OEM.LSTM_ONLY
+        }
+      );
+      
+      console.log(`✅ OCR completed with ${confidence}% confidence`);
+      console.log(`📝 Raw extracted text: "${text}"`);
+      console.log("Here are the words with their confidence:")
+      console.log(words)
+      console.log(`🔢 Word count: ${words.length}`);
+      
+      // Filter out low-confidence words to reduce noise
+      const highConfidenceWords = words.filter(word => word.confidence > 30);
+      console.log(`🎯 High confidence words: ${highConfidenceWords.length}/${words.length}`);
+      
+      // Clean up the extracted text
+      const cleanedText = this.cleanExtractedText(text);
+      
+      return {
+        text: cleanedText,
+        confidence: confidence,
+        hasContent: cleanedText.length > 0
+      };
+      
+    } catch (error) {
+      console.error('❌ OCR extraction failed:', error);
+      return {
+        text: '',
+        confidence: 0,
+        hasContent: false,
+        error: error.message
+      };
+    }
+  }
+  
+  static cleanExtractedText(rawText) {
+    if (!rawText || typeof rawText !== 'string') return '';
+    
+    let cleaned = rawText
+      .replace(/\n+/g, ' ')  // Replace multiple newlines with space
+      .replace(/\s+/g, ' ')  // Replace multiple spaces with single space
+      .replace(/[^\w\s\+\-\=\(\)\[\]\{\}\/\*\^\√\∫\∑\∏\π\θ\α\β\γ\δ\ε\ζ\η\λ\μ\ν\ξ\ρ\σ\τ\φ\χ\ψ\ω\.,!?:;]/g, '') // Remove OCR artifacts
+      .trim();
+    
+    // Remove repetitive patterns (common OCR issue)
+    const words = cleaned.split(' ');
+    const uniqueWords = [];
+    let lastWord = '';
+    let repeatCount = 0;
+    
+    for (const word of words) {
+      if (word === lastWord) {
+        repeatCount++;
+        if (repeatCount < 3) { // Allow up to 2 repetitions
+          uniqueWords.push(word);
+        }
+      } else {
+        uniqueWords.push(word);
+        repeatCount = 0;
+      }
+      lastWord = word;
+    }
+    
+    const finalText = uniqueWords.join(' ').trim();
+    
+    // If text is too repetitive or nonsensical, return empty
+    if (this.isTextNonsensical(finalText)) {
+      console.log('⚠️ Text appears to be OCR noise, filtering out');
+      return '';
+    }
+    
+    return finalText;
+  }
+  
+  static isTextNonsensical(text) {
+    if (!text || text.length < 3) return true;
+    
+    // Check for excessive repetition
+    const words = text.split(' ');
+    const uniqueWords = new Set(words);
+    const repetitionRatio = uniqueWords.size / words.length;
+    
+    // If more than 70% of words are repetitive, likely OCR noise
+    if (repetitionRatio < 0.3 && words.length > 5) {
+      return true;
+    }
+    
+    // Check for excessive single characters or gibberish
+    const singleChars = text.match(/\b\w\b/g) || [];
+    if (singleChars.length > text.length * 0.5) {
+      return true;
+    }
+    
+    return false;
+  }
+  
+  static detectContentType(text) {
+    const mathKeywords = ['=', '+', '-', '*', '/', '^', '√', '∫', '∑', '∏', 'sin', 'cos', 'tan', 'log', 'ln'];
+    const hasMath = mathKeywords.some(keyword => text.toLowerCase().includes(keyword));
+    
+    const questionKeywords = ['?', 'what', 'how', 'why', 'when', 'where', 'which', 'solve', 'find', 'calculate'];
+    const hasQuestion = questionKeywords.some(keyword => text.toLowerCase().includes(keyword));
+    
+    if (hasMath) return 'math';
+    if (hasQuestion) return 'question';
+    return 'text';
   }
 }
 
@@ -237,10 +380,96 @@ app.post('/api/analyze-canvas', upload.single('canvas'), async (req, res) => {
       return res.status(400).json({ error: 'Canvas image, description, or extracted text is required' });
     }
 
-    // Create contextual analysis prompt
     let analysisPrompt = '';
-    
-    if (triggerReason) {
+    let ocrResult = null;
+
+    if (req.file) {
+      // Canvas image was uploaded - extract text using OCR first
+      console.log('Canvas image received:', {
+        filename: req.file.filename,
+        size: req.file.size,
+        mimetype: req.file.mimetype
+      });
+      
+      // Extract text from the canvas image using OCR
+      const ocrResult = await OCRService.extractTextFromImage(req.file.buffer);
+      
+      if (ocrResult.hasContent) {
+        console.log(`📝 OCR extracted text: "${ocrResult.text}"`);
+        console.log(`🎯 OCR confidence: ${ocrResult.confidence}%`);
+        
+        const contentType = OCRService.detectContentType(ocrResult.text);
+        console.log(`🔍 Content type detected: ${contentType}`);
+        
+        // Create analysis prompt based on extracted text and content type
+        switch (contentType) {
+          case 'math':
+            analysisPrompt = `You are a math tutor. The student has written/drawn mathematical content on their canvas: "${ocrResult.text}"
+
+Analyze this mathematical work:
+- Check if equations or calculations are correct
+- Identify any errors and explain how to fix them
+- Guide them through the next steps if the work is incomplete
+- Ask questions to test their understanding
+- If it's a problem setup, help them think about the approach
+
+Be encouraging but precise. Point out specific mistakes and provide clear guidance. Keep your response focused and educational (2-3 sentences).`;
+            break;
+            
+          case 'question':
+            analysisPrompt = `The student has written a question on their canvas: "${ocrResult.text}"
+
+As their tutor, don't answer directly. Instead:
+- Ask them what they think the answer might be
+- Guide them to break down the question into smaller parts
+- Help them identify what information they need
+- Suggest a method or approach to find the answer
+- Encourage them to think through the problem step by step
+
+Be supportive and guide their thinking process. Keep your response brief and focused on helping them learn (2-3 sentences).`;
+            break;
+            
+          default:
+            analysisPrompt = `The student has written text/notes on their canvas: "${ocrResult.text}"
+
+As their tutor, provide helpful feedback:
+- Check if the content is accurate and complete
+- Suggest ways to organize or expand their notes
+- Ask questions to test their understanding
+- Help them connect concepts to other topics
+- Encourage deeper thinking about the subject
+
+Be encouraging and educational. Keep your response constructive and brief (2-3 sentences).`;
+        }
+        
+        if (description) {
+          analysisPrompt += `\n\nAdditional context: ${description}`;
+        }
+        
+      } else {
+        // No text extracted - check if canvas is actually empty or just no readable text
+        console.log('⚠️ No text extracted from canvas');
+        
+        // Instead of trying to analyze non-existent visual content, ask for clarification
+        analysisPrompt = `I notice you've asked me to analyze your canvas work, but I'm not able to detect any clear text or recognizable content that I can provide meaningful feedback on.
+
+This could mean:
+- The canvas might be empty or contain very light/unclear markings
+- You might have drawn something that's difficult for me to interpret
+- There might be technical issues with the image processing
+
+Could you try:
+1. Drawing or writing something more clearly on the canvas
+2. Using darker strokes or larger text
+3. Writing a specific question or problem you'd like help with
+
+I'm here to help with math problems, questions, notes, or any learning content you'd like to work on together!`;
+        
+        if (description) {
+          analysisPrompt += `\n\nYou mentioned: ${description}. Can you elaborate on what you're trying to work on?`;
+        }
+      }
+    } else if (triggerReason) {
       // This is a live commentary request - act like a real teacher
       analysisPrompt = `You are a teacher standing next to a student. `;
       switch (triggerReason) {
@@ -291,8 +520,14 @@ app.post('/api/analyze-canvas', upload.single('canvas'), async (req, res) => {
       analysis: analysisResponse,
       personality: personality,
       timestamp: new Date().toISOString(),
-      extractedText: extractedText || '',
-      analysisType: analysisType || 'general'
+      extractedText: extractedText || (req.file && ocrResult ? ocrResult.text : ''),
+      analysisType: analysisType || 'general',
+      ocrResults: req.file && ocrResult ? {
+        text: ocrResult.text,
+        confidence: ocrResult.confidence,
+        contentType: OCRService.detectContentType(ocrResult.text),
+        hasContent: ocrResult.hasContent
+      } : null
     };
 
     res.json(response);

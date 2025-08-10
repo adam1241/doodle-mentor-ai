@@ -1,5 +1,5 @@
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { BookOpen, Brain } from "lucide-react";
 import { ImageUpload } from "@/components/ImageUpload";
 import { DrawingCanvas } from "@/components/DrawingCanvas";
@@ -9,10 +9,19 @@ import { PersonalitySelector } from "@/components/PersonalitySelector";
 const Index = () => {
   const [selectedPersonality, setSelectedPersonality] = useState<'calm' | 'angry' | 'cool' | 'lazy'>('calm');
   const [uploadedImage, setUploadedImage] = useState<string | null>(null);
+  const [canvasAnalysis, setCanvasAnalysis] = useState<string | null>(null);
+  const canvasRef = useRef<{ analyzeCanvas: () => void } | null>(null);
 
-  const handleAnalyzeCanvas = () => {
-    // This would integrate with actual AI analysis
-    console.log("Analyzing canvas with", selectedPersonality, "personality");
+  const handleCanvasAnalysis = (analysis: string) => {
+    setCanvasAnalysis(analysis);
+    console.log("Canvas analysis received:", analysis);
+  };
+
+  const triggerCanvasAnalysis = () => {
+    // Trigger analysis from the DrawingCanvas component
+    if (canvasRef.current) {
+      canvasRef.current.analyzeCanvas();
+    }
   };
 
   return (
@@ -55,8 +64,10 @@ const Index = () => {
               </div>
               
               <DrawingCanvas 
+                ref={canvasRef}
                 className="bg-gradient-to-br from-canvas-bg to-notebook-paper shadow-notebook"
                 selectedPersonality={selectedPersonality}
+                onCanvasAnalysis={handleCanvasAnalysis}
               />
             </div>
           </div>
@@ -65,7 +76,7 @@ const Index = () => {
           <div className="lg:col-span-1">
             <AIChat
               selectedPersonality={selectedPersonality}
-              onAnalyzeCanvas={handleAnalyzeCanvas}
+              onAnalyzeCanvas={triggerCanvasAnalysis}
               className="h-full shadow-chat bg-gradient-to-br from-card to-background"
             />
           </div>

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useRef, useState, useCallback, forwardRef, useImperativeHandle } from "react";
 import { Canvas as FabricCanvas, Line, IText, PencilBrush, Circle, Rect } from "fabric";
 import { Pencil, Square, RotateCcw, Download, Type, Circle as CircleIcon, RectangleHorizontal, Eraser, Minus, Upload, Eye } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -6,32 +6,32 @@ import { Slider } from "@/components/ui/slider";
 import { Card } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { toast } from "sonner";
-import { canvasAnalysisService, LiveCommentary } from "@/services/canvasAnalysis";
-import { LiveCommentaryComponent } from "./LiveCommentary";
 
 interface DrawingCanvasProps {
   className?: string;
   selectedPersonality?: 'calm' | 'angry' | 'cool' | 'lazy';
+  onCanvasAnalysis?: (analysis: string) => void;
 }
 
-export const DrawingCanvas = ({ className, selectedPersonality = 'calm' }: DrawingCanvasProps) => {
+interface DrawingCanvasRef {
+  analyzeCanvas: () => void;
+}
+
+export const DrawingCanvas = forwardRef<DrawingCanvasRef, DrawingCanvasProps>(({ className, selectedPersonality = 'calm', onCanvasAnalysis }, ref) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [fabricCanvas, setFabricCanvas] = useState<FabricCanvas | null>(null);
   const [activeTool, setActiveTool] = useState<"draw" | "text" | "erase" | "select" | "circle" | "rectangle" | "line">("draw");
   const [brushSize, setBrushSize] = useState(2);
   const [brushColor, setBrushColor] = useState("#2563eb");
-  const [showGrid, setShowGrid] = useState(true);
   const [isDrawingShape, setIsDrawingShape] = useState(false);
   const [startPoint, setStartPoint] = useState<{x: number, y: number} | null>(null);
   const [currentShape, setCurrentShape] = useState<any>(null);
   const [lastRenderTime, setLastRenderTime] = useState(0);
   const renderTimeoutRef = useRef<number | null>(null);
   
-  // Live analysis state
-  const [liveCommentary, setLiveCommentary] = useState<LiveCommentary[]>([]);
-  const [isLiveAnalysisEnabled, setIsLiveAnalysisEnabled] = useState(true);
-  const [isVoiceEnabled, setIsVoiceEnabled] = useState(false);
+  // Canvas analysis state
+  const [showGrid, setShowGrid] = useState(false);
   const analysisTimeoutRef = useRef<number | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -92,25 +92,74 @@ export const DrawingCanvas = ({ className, selectedPersonality = 'calm' }: Drawi
     return canvas;
   }, []); // Empty dependency array - only initialize once
 
-  // Setup live analysis system
-  useEffect(() => {
-    // Set personality for analysis service
-    canvasAnalysisService.setPersonality(selectedPersonality);
-    
-    // Set up commentary callback
-    canvasAnalysisService.setCommentaryCallback((commentary: LiveCommentary) => {
-      setLiveCommentary(prev => [...prev, commentary]);
-    });
+  // Canvas analysis function
+  const analyzeCanvas = useCallback(async () => {
+    if (!fabricCanvas || !canvasRef.current) {
+      console.log('Canvas analysis skipped:', { fabricCanvas: !!fabricCanvas, canvasRef: !!canvasRef.current });
+      return;
+    }
 
-    return () => {
-      // Clean up analysis service on unmount
-      canvasAnalysisService.dispose();
-    };
-  }, [selectedPersonality]);
+    console.log('Starting canvas analysis...');
+    toast('Analyzing your work...');
+
+    try {
+      console.log('Starting canvas capture for analysis...');
+      
+      // Get canvas as image data
+      const dataURL = fabricCanvas.toDataURL({
+        format: 'png',
+        quality: 0.8,
+        multiplier: 1
+      });
+      
+      console.log('Canvas dataURL generated, length:', dataURL.length);
+
+      // Convert to blob and send to backend
+      const response = await fetch(dataURL);
+      const blob = await response.blob();
+      
+      console.log('Blob created, size:', blob.size);
+      
+      const formData = new FormData();
+      formData.append('canvas', blob, 'canvas.png');
+      formData.append('personality', selectedPersonality);
+      formData.append('description', 'Canvas analysis request');
+
+      console.log('Sending request to http://localhost:3001/api/analyze-canvas with personality:', selectedPersonality);
+
+      const analysisResponse = await fetch('http://localhost:3001/api/analyze-canvas', {
+        method: 'POST',
+        body: formData
+      });
+
+      console.log('Analysis response status:', analysisResponse.status);
+
+      if (analysisResponse.ok) {
+        const result = await analysisResponse.json();
+        console.log('Analysis result:', result);
+        
+        if (result.analysis) {
+          if (onCanvasAnalysis) {
+            onCanvasAnalysis(result.analysis);
+          }
+          toast.success(`AI Analysis: ${result.analysis.substring(0, 100)}...`);
+        } else {
+          toast.error('No analysis received from AI');
+        }
+      } else {
+        const errorText = await analysisResponse.text();
+        console.error('Analysis response error:', errorText);
+        toast.error(`Analysis failed: ${analysisResponse.status} ${analysisResponse.statusText}`);
+      }
+    } catch (error) {
+      console.error('Canvas analysis failed:', error);
+      toast.error('Failed to analyze canvas. Please try again.');
+    }
+  }, [fabricCanvas, selectedPersonality, onCanvasAnalysis]);
 
   // Trigger analysis when canvas changes
   const triggerCanvasAnalysis = useCallback(() => {
-    if (!fabricCanvas || !canvasRef.current || !isLiveAnalysisEnabled) return;
+    if (!fabricCanvas || !canvasRef.current) return;
 
     // Debounce analysis calls
     if (analysisTimeoutRef.current) {
@@ -118,9 +167,14 @@ export const DrawingCanvas = ({ className, selectedPersonality = 'calm' }: Drawi
     }
 
     analysisTimeoutRef.current = setTimeout(() => {
-      canvasAnalysisService.analyzeCanvas(canvasRef.current!);
-    }, 2000); // Wait 2 seconds after last change
-  }, [fabricCanvas, isLiveAnalysisEnabled]);
+      analyzeCanvas();
+    }, 3000); // Wait 3 seconds after last change
+  }, [fabricCanvas, analyzeCanvas]);
+
+  // Expose analyzeCanvas method to parent component
+  useImperativeHandle(ref, () => ({
+    analyzeCanvas
+  }), [analyzeCanvas]);
 
   // Handle keyboard events for delete functionality
   useEffect(() => {
@@ -466,26 +520,12 @@ export const DrawingCanvas = ({ className, selectedPersonality = 'calm' }: Drawi
     fabricCanvas.on('mouse:move', handleMouseMove);
     fabricCanvas.on('mouse:up', handleMouseUp);
     
-    // Add canvas change listeners for live analysis
-    const handleCanvasChange = () => {
-      triggerCanvasAnalysis();
-    };
-
-    fabricCanvas.on('path:created', handleCanvasChange);
-    fabricCanvas.on('object:added', handleCanvasChange);
-    fabricCanvas.on('object:removed', handleCanvasChange);
-    fabricCanvas.on('object:modified', handleCanvasChange);
-    fabricCanvas.on('text:changed', handleCanvasChange);
+    // Automatic analysis removed - only manual analysis available
 
     return () => {
       fabricCanvas.off('mouse:down', handleMouseDown);
       fabricCanvas.off('mouse:move', handleMouseMove);
       fabricCanvas.off('mouse:up', handleMouseUp);
-      fabricCanvas.off('path:created', handleCanvasChange);
-      fabricCanvas.off('object:added', handleCanvasChange);
-      fabricCanvas.off('object:removed', handleCanvasChange);
-      fabricCanvas.off('object:modified', handleCanvasChange);
-      fabricCanvas.off('text:changed', handleCanvasChange);
     };
   }, [fabricCanvas, activeTool, brushColor, brushSize, isDrawingShape, startPoint, currentShape]);
 
@@ -553,10 +593,6 @@ export const DrawingCanvas = ({ className, selectedPersonality = 'calm' }: Drawi
     fabricCanvas.renderAll();
     toast("Canvas cleared!");
   };
-  
-  const toggleGrid = () => {
-    setShowGrid(!showGrid);
-  };
 
   const handleDownload = () => {
     if (!fabricCanvas) return;
@@ -580,9 +616,6 @@ export const DrawingCanvas = ({ className, selectedPersonality = 'calm' }: Drawi
     if (!file) return;
 
     try {
-      // Analyze uploaded image with OCR
-      const analysis = await canvasAnalysisService.analyzeUploadedImage(file);
-      
       // Create image object and add to canvas
       const reader = new FileReader();
       reader.onload = (e) => {
@@ -597,15 +630,18 @@ export const DrawingCanvas = ({ className, selectedPersonality = 'calm' }: Drawi
           
           fabricCanvas?.add(fabricImage);
           fabricCanvas?.renderAll();
+          
+          // Trigger analysis after image is added
+          triggerCanvasAnalysis();
         };
         imgElement.src = e.target?.result as string;
       };
       reader.readAsDataURL(file);
       
-      toast(`Image uploaded and analyzed! Found: "${analysis.extractedText.substring(0, 50)}..."`);
+      toast("Image uploaded successfully!");
     } catch (error) {
       console.error('Image upload failed:', error);
-      toast("Failed to analyze uploaded image");
+      toast("Failed to upload image");
     }
     
     // Reset file input
@@ -614,14 +650,14 @@ export const DrawingCanvas = ({ className, selectedPersonality = 'calm' }: Drawi
     }
   };
 
-  const toggleLiveAnalysis = () => {
-    setIsLiveAnalysisEnabled(!isLiveAnalysisEnabled);
-    toast(isLiveAnalysisEnabled ? "Live analysis disabled" : "Live analysis enabled");
+  const toggleGrid = () => {
+    setShowGrid(!showGrid);
+    toast(showGrid ? "Grid hidden" : "Grid shown");
   };
 
-  const clearCommentary = () => {
-    setLiveCommentary([]);
-    toast("Commentary cleared");
+  const manualAnalysis = () => {
+    analyzeCanvas();
+    toast("Analyzing work...");
   };
 
   const colors = [
@@ -746,17 +782,7 @@ export const DrawingCanvas = ({ className, selectedPersonality = 'calm' }: Drawi
               Upload
             </Button>
             
-            {/* Live Analysis Toggle */}
-            <Button
-              variant={isLiveAnalysisEnabled ? "default" : "outline"}
-              size="sm"
-              onClick={toggleLiveAnalysis}
-              className="gap-2"
-            >
-              <Eye className="h-4 w-4" />
-              AI Watch
-            </Button>
-            
+
             <Button variant="outline" size="sm" onClick={handleClearCanvas}>
               <RotateCcw className="h-4 w-4" />
             </Button>
@@ -808,16 +834,6 @@ export const DrawingCanvas = ({ className, selectedPersonality = 'calm' }: Drawi
         />
       </div>
     </Card>
-    
-    {/* Live Commentary Component */}
-    <LiveCommentaryComponent
-      commentary={liveCommentary}
-      personality={selectedPersonality}
-      isVoiceEnabled={isVoiceEnabled}
-      className="fixed bottom-4 right-4 w-80 z-40"
-      onToggleVoice={() => setIsVoiceEnabled(!isVoiceEnabled)}
-      onClear={clearCommentary}
-    />
     </div>
   );
-};
+});
